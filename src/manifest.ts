@@ -11,6 +11,13 @@ import type { SecurityScheme } from "./ir/model.js";
 
 export const MANIFEST_FILENAME = ".mcp-translator.json";
 
+/**
+ * Schema version of the `.mcp-translator.json` format. Bump on a breaking change to the manifest
+ * shape; the append path refuses manifests written by a newer (higher) version so it never
+ * misreads a format it doesn't understand.
+ */
+export const MANIFEST_VERSION = 1;
+
 export interface ManifestTool {
   name: string;
   method: string;
@@ -26,6 +33,8 @@ export interface ManifestSource {
 }
 
 export interface TranslatorManifest {
+  /** Schema version of this manifest file; see {@link MANIFEST_VERSION}. */
+  manifestVersion: number;
   generator: string;
   generatorVersion: string;
   serverName: string;

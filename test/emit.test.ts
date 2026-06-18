@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { parseSource } from "../src/parsers/index.js";
 import { generateProject, appendToProject } from "../src/emitters/project.js";
-import { readManifest } from "../src/manifest.js";
+import { readManifest, writeManifest, MANIFEST_VERSION } from "../src/manifest.js";
 
 const fixtures = path.dirname(fileURLToPath(import.meta.url)) + "/fixtures";
 
@@ -54,6 +54,24 @@ describe("project generation", () => {
       "getPetById",
       "listPets",
     ]);
+  });
+
+  it("stamps the manifest with the current schema version", async () => {
+    const manifest = await readManifest(dir);
+    expect(manifest?.manifestVersion).toBe(MANIFEST_VERSION);
+  });
+});
+
+describe("manifest schema version", () => {
+  it("refuses to append to a manifest written by a newer format", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "mcpgen-"));
+    const model = await parseSource({ specPath: `${fixtures}/petstore.openapi.yaml` });
+    await generateProject(model, { outputDir: dir });
+
+    const manifest = await readManifest(dir);
+    await writeManifest(dir, { ...manifest!, manifestVersion: MANIFEST_VERSION + 1 });
+
+    await expect(appendToProject(model, { projectDir: dir })).rejects.toThrow(/newer than/);
   });
 });
 

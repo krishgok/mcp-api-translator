@@ -9,6 +9,7 @@
 import { readFile } from "node:fs/promises";
 import { parse as parseYaml } from "yaml";
 import type { ApiModel, SourceFormat } from "../ir/model.js";
+import { assertValidApiModel } from "../ir/validate.js";
 import { parseOpenApi } from "./openapi.js";
 import { parsePostman } from "./postman.js";
 
@@ -71,14 +72,20 @@ export function detectFormat(raw: unknown): SourceFormat {
 export async function parseSource(input: SourceInput): Promise<ApiModel> {
   const raw = await loadRawSpec(input);
   const format = !input.format || input.format === "auto" ? detectFormat(raw) : input.format;
+  let model: ApiModel;
   switch (format) {
     case "openapi":
-      return parseOpenApi(raw);
+      model = await parseOpenApi(raw);
+      break;
     case "postman":
-      return parsePostman(raw);
+      model = parsePostman(raw);
+      break;
     default:
       throw new Error(`Unsupported format: ${format as string}`);
   }
+  // Validation gate: emitters trust the model, so reject a malformed one here with a clear error.
+  assertValidApiModel(model);
+  return model;
 }
 
 export const SUPPORTED_FORMATS: SourceFormat[] = ["openapi", "postman"];

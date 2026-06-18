@@ -17,6 +17,7 @@ import {
   readManifest,
   writeManifest,
   MANIFEST_FILENAME,
+  MANIFEST_VERSION,
   type ManifestTool,
   type TranslatorManifest,
 } from "../manifest.js";
@@ -241,6 +242,7 @@ export async function generateProject(
   }
 
   const manifest: TranslatorManifest = {
+    manifestVersion: MANIFEST_VERSION,
     generator: GENERATOR_NAME,
     generatorVersion: GENERATOR_VERSION,
     serverName,
@@ -290,6 +292,12 @@ export async function appendToProject(
       `${dir} has no ${MANIFEST_FILENAME}; it is not a generated project. Use generate_mcp_server instead.`,
     );
   }
+  // Refuse a manifest from a newer format than we understand (a missing field == legacy v1).
+  if ((manifest.manifestVersion ?? 1) > MANIFEST_VERSION) {
+    throw new Error(
+      `${MANIFEST_FILENAME} is schema version ${manifest.manifestVersion}, newer than this generator supports (${MANIFEST_VERSION}). Upgrade mcp-api-translator.`,
+    );
+  }
 
   // Merge servers and security schemes.
   const servers = [...new Set([...manifest.servers, ...model.servers])];
@@ -337,6 +345,7 @@ export async function appendToProject(
 
   const merged: TranslatorManifest = {
     ...manifest,
+    manifestVersion: MANIFEST_VERSION,
     generatorVersion: GENERATOR_VERSION,
     servers,
     securitySchemes: schemes,
