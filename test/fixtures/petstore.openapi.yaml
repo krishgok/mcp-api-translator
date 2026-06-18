@@ -1,0 +1,64 @@
+openapi: 3.0.3
+info:
+  title: Swagger Petstore
+  version: 1.0.0
+servers:
+  - url: https://petstore.example.com/v1
+components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+security:
+  - apiKey: []
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      summary: List all pets
+      tags: [pets]
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: Max items to return
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: ok
+    post:
+      operationId: createPet
+      summary: Create a pet
+      tags: [pets]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                tag:
+                  type: string
+                  nullable: true
+      responses:
+        "201":
+          description: created
+  /pets/{petId}:
+    get:
+      operationId: getPetById
+      summary: Get a pet by id
+      tags: [pets]
+      parameters:
+        - name: petId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ok

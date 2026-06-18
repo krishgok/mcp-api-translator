@@ -1,0 +1,59 @@
+/**
+ * Shared helpers for turning detected auth into env-var-backed {@link SecurityScheme}s.
+ *
+ * Credentials are always read from the environment by the generated server — never embedded.
+ * We prefer friendly names (API_KEY, API_TOKEN, ...) and only namespace by scheme name when two
+ * schemes would otherwise collide.
+ */
+import type { SecurityScheme, SecuritySchemeType } from "../ir/model.js";
+
+function envPrefix(schemeName: string): string {
+  return (
+    schemeName
+      .replace(/[^a-zA-Z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .toUpperCase() || "AUTH"
+  );
+}
+
+interface RawScheme {
+  name: string;
+  type: SecuritySchemeType;
+  in?: "header" | "query" | "cookie";
+  paramName?: string;
+  scheme?: string;
+}
+
+/** Friendly env var slots for a scheme, before collision resolution. */
+function friendlyEnvVars(raw: RawScheme): string[] {
+  if (raw.type === "http" && raw.scheme?.toLowerCase() === "basic") {
+    return ["API_USERNAME", "API_PASSWORD"];
+  }
+  if (raw.type === "http") return ["API_TOKEN"]; // bearer and other http schemes
+  if (raw.type === "oauth2" || raw.type === "openIdConnect") return ["API_TOKEN"];
+  return ["API_KEY"]; // apiKey and anything else
+}
+
+/**
+ * Assign env vars across all schemes, namespacing by scheme name where the friendly name is
+ * already claimed by a different scheme.
+ */
+export function assignEnvVars(rawSchemes: RawScheme[]): SecurityScheme[] {
+  const used = new Set<string>();
+  return rawSchemes.map((raw) => {
+    const friendly = friendlyEnvVars(raw);
+    const collides = friendly.some((v) => used.has(v));
+    const envVars = collides
+      ? friendly.map((v) => `${envPrefix(raw.name)}_${v.replace(/^API_/, "")}`)
+      : friendly;
+    for (const v of envVars) used.add(v);
+    return {
+      name: raw.name,
+      type: raw.type,
+      in: raw.in,
+      paramName: raw.paramName,
+      scheme: raw.scheme,
+      envVars,
+    };
+  });
+}
