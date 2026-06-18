@@ -21,6 +21,9 @@ export interface SourceInput {
   format?: SourceFormat | "auto";
 }
 
+/** Upper bound on spec size; guards against accidental/hostile oversized inputs. */
+export const MAX_SPEC_BYTES = 16 * 1024 * 1024; // 16 MB
+
 /** Parse inline text or read a file, returning the raw spec object. */
 export async function loadRawSpec(input: SourceInput): Promise<unknown> {
   let text: string;
@@ -30,6 +33,12 @@ export async function loadRawSpec(input: SourceInput): Promise<unknown> {
     text = await readFile(input.specPath, "utf8");
   } else {
     throw new Error("Provide either `spec` (inline text) or `specPath` (a local file path).");
+  }
+  const bytes = Buffer.byteLength(text, "utf8");
+  if (bytes > MAX_SPEC_BYTES) {
+    throw new Error(
+      `Spec is ${bytes} bytes, exceeding the ${MAX_SPEC_BYTES}-byte limit. Split it or raise MAX_SPEC_BYTES.`,
+    );
   }
   // YAML is a superset of JSON, so a single YAML parse handles both formats.
   try {

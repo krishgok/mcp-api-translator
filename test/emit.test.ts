@@ -41,7 +41,7 @@ describe("project generation", () => {
   it("injects detected auth from env, never embeds secrets", async () => {
     const auth = await read(dir, "src/auth.ts");
     expect(auth).toContain('security.includes("apiKey")');
-    expect(auth).toContain("process.env.API_KEY");
+    expect(auth).toContain('process.env["API_KEY"]');
     const envExample = await read(dir, ".env.example");
     expect(envExample).toContain("API_KEY=");
     expect(envExample).toContain("API_BASE_URL=https://petstore.example.com/v1");
@@ -89,5 +89,54 @@ describe("guards", () => {
     const model = await parseSource({ specPath: `${fixtures}/petstore.openapi.yaml` });
     await generateProject(model, { outputDir: dir });
     await expect(generateProject(model, { outputDir: dir })).rejects.toThrow(/already a generated/);
+  });
+});
+
+describe("hardening", () => {
+  it("does not let a spec-derived scheme name break out of a generated comment", async () => {
+    // A hostile security-scheme key containing a newline + code payload.
+    const payload = "globalThis.PWNED = true;";
+    const spec = {
+      openapi: "3.0.0",
+      info: { title: "Evil API", version: "1.0.0" },
+      servers: [{ url: "https://evil.example.com" }],
+      paths: {
+        "/ping": { get: { operationId: "ping", responses: { "200": { description: "ok" } } } },
+      },
+      components: {
+        securitySchemes: {
+          [`evil\n  ${payload}\n  //`]: { type: "apiKey", in: "header", name: "X-API-Key" },
+        },
+      },
+    };
+    const dir = await mkdtemp(path.join(tmpdir(), "mcpgen-"));
+    const model = await parseSource({ spec: JSON.stringify(spec), format: "openapi" });
+    await generateProject(model, { outputDir: dir });
+    const auth = await read(dir, "src/auth.ts");
+    // The escaped name may appear inside a string literal/comment, but a real newline must never
+    // break the payload out onto its own line as an executable statement.
+    const brokeOut = auth.split("\n").filter((line) => line.trim().startsWith("globalThis.PWNED"));
+    expect(brokeOut).toEqual([]);
+  });
+
+  it("treats an undeclared {token} in the path as a required string input", async () => {
+    const spec = {
+      openapi: "3.0.0",
+      info: { title: "Tokens API", version: "1.0.0" },
+      servers: [{ url: "https://api.example.com" }],
+      paths: {
+        // widgetId appears in the path but is NOT declared as a parameter.
+        "/widgets/{widgetId}": {
+          get: { operationId: "getWidget", responses: { "200": { description: "ok" } } },
+        },
+      },
+    };
+    const dir = await mkdtemp(path.join(tmpdir(), "mcpgen-"));
+    const model = await parseSource({ spec: JSON.stringify(spec), format: "openapi" });
+    await generateProject(model, { outputDir: dir });
+    const tool = await read(dir, "src/tools/getWidget.ts");
+    expect(tool).toContain('"pathParams": [\n    "widgetId"\n  ]');
+    expect(tool).toContain('"widgetId"');
+    expect(tool).toContain('"required"');
   });
 });

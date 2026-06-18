@@ -78,8 +78,21 @@ async function isEmptyDir(dir: string): Promise<boolean> {
   try {
     const entries = await readdir(dir);
     return entries.length === 0;
-  } catch {
-    return true; // doesn't exist yet
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return true; // doesn't exist yet
+    throw err; // surface EACCES/ENOTDIR rather than silently treating as empty
+  }
+}
+
+/** Hard ceiling on generated tools; a pathological spec shouldn't scaffold thousands of files. */
+export const MAX_GENERATED_TOOLS = 1000;
+
+function assertToolCount(count: number): void {
+  if (count > MAX_GENERATED_TOOLS) {
+    throw new Error(
+      `Refusing to generate ${count} tools (limit ${MAX_GENERATED_TOOLS}). ` +
+        `Narrow the spec with includeTags / methods / pathGlob / excludeOperations.`,
+    );
   }
 }
 
@@ -101,6 +114,17 @@ export function operationToToolEmit(op: Operation, sourceTitle: string): t.ToolE
     if (p.description && !("description" in schema)) schema.description = p.description;
     properties[p.name] = schema;
     if (p.required) required.push(p.name);
+  }
+
+  // Substitution is driven by the actual {tokens} in the path, not the declared params: a token
+  // with no matching parameter still needs an input so it can be filled in rather than sent
+  // literally.
+  const pathTokens = [...op.path.matchAll(/\{([^}]+)\}/g)].map((m) => m[1]!);
+  for (const token of pathTokens) {
+    if (!(token in properties)) {
+      properties[token] = { type: "string" };
+      if (!required.includes(token)) required.push(token);
+    }
   }
 
   let bodyParam: string | null = null;
@@ -130,7 +154,7 @@ export function operationToToolEmit(op: Operation, sourceTitle: string): t.ToolE
     plan: {
       method: op.method,
       pathTemplate: op.path,
-      pathParams: op.parameters.filter((p) => p.in === "path").map((p) => p.name),
+      pathParams: pathTokens,
       queryParams: op.parameters.filter((p) => p.in === "query").map((p) => p.name),
       headerParams: op.parameters.filter((p) => p.in === "header").map((p) => p.name),
       bodyParam,
@@ -197,6 +221,7 @@ export async function generateProject(
   const description = model.title + (model.version ? ` (v${model.version})` : "");
 
   const { operations, filteredOut } = curate(model, options.filters ?? {});
+  assertToolCount(operations.length);
   const tools = operations.map((op) => operationToToolEmit(op, model.title));
 
   const fw = new FileWriter(dir);
@@ -286,6 +311,7 @@ export async function appendToProject(
     ...manifest.tools.map((tool) => tool.name),
     ...newTools.map((tl) => tl.name),
   ];
+  assertToolCount(allToolNames.length);
 
   const fw = new FileWriter(dir);
   await emitShared(

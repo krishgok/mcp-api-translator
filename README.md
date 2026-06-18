@@ -100,6 +100,20 @@ client-config.md        # paste-ready Claude / Cursor / Codex config
 - **Postman** parameter types are inferred from examples (Postman carries no formal schema).
 - **Not a hosted service** and **no live in-memory proxy** in v1 — it generates code you run.
 
+## Security & trust model
+
+A spec is treated as **untrusted input**: spec-derived strings are escaped before they're embedded
+in generated source, generated tool names are restricted to `[A-Za-z0-9_]`, and all file writes stay
+under `outputDir`. Two things are still inherent to what a generated server _does_, so review the
+output before pointing it at credentials:
+
+- **The generated server calls whatever base URL the spec declares** (or `API_BASE_URL`) and injects
+  your env-supplied credentials into those requests. Generating from a spec you don't trust, then
+  running it with real secrets, can send those secrets to a host the spec chose. Set `API_BASE_URL`
+  explicitly when in doubt.
+- **Secrets are never embedded** in the generated project — `auth.ts` reads them from the environment
+  at runtime and `.env.example` ships with empty values.
+
 ## Development
 
 ```bash
