@@ -75,6 +75,9 @@ Add it to an MCP client (e.g. Claude Desktop / Claude Code `mcp.json`):
 Then ask your agent to, e.g., _"analyze ./petstore.yaml, then generate an MCP server for just the
 `pets` tag into ./petstore-mcp"_.
 
+For the full end-to-end journey (analyze → curate → generate → run → aggregate → publish), see
+[docs/usage-workflow.md](docs/usage-workflow.md).
+
 ## Generated project layout
 
 ```
