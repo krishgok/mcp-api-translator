@@ -9,6 +9,28 @@ say to the agent and what happens underneath.
 
 ---
 
+## TL;DR
+
+```bash
+# 1. Install & connect the generator (once)
+git clone https://github.com/krishgok/mcp-api-translator && cd mcp-api-translator
+npm install && npm run build
+#    → add dist/index.js to your MCP client as "api-translator" (see Step 0)
+
+# 2. In your agent, drive the generator (no shell needed):
+#    "analyze ./api.yaml, then generate an MCP server for the GET endpoints into ./api-mcp"
+
+# 3. Build, configure, and run the generated server
+cd api-mcp && npm install && npm run build
+cp .env.example .env          # set API_BASE_URL + any credentials
+npm start
+#    → add api-mcp/dist/index.js to your MCP client; your agent can now call the API
+```
+
+The rest of this document explains each step and what happens underneath.
+
+---
+
 ## The mental model
 
 ```
