@@ -9,6 +9,7 @@
 import { readFile } from "node:fs/promises";
 import { parse as parseYaml } from "yaml";
 import type { ApiModel, SourceFormat } from "../ir/model.js";
+import { assertValidApiModel } from "../ir/validate.js";
 import { parseOpenApi } from "./openapi.js";
 import { parsePostman } from "./postman.js";
 
@@ -21,6 +22,9 @@ export interface SourceInput {
   format?: SourceFormat | "auto";
 }
 
+/** Upper bound on spec size; guards against accidental/hostile oversized inputs. */
+export const MAX_SPEC_BYTES = 16 * 1024 * 1024; // 16 MB
+
 /** Parse inline text or read a file, returning the raw spec object. */
 export async function loadRawSpec(input: SourceInput): Promise<unknown> {
   let text: string;
@@ -30,6 +34,12 @@ export async function loadRawSpec(input: SourceInput): Promise<unknown> {
     text = await readFile(input.specPath, "utf8");
   } else {
     throw new Error("Provide either `spec` (inline text) or `specPath` (a local file path).");
+  }
+  const bytes = Buffer.byteLength(text, "utf8");
+  if (bytes > MAX_SPEC_BYTES) {
+    throw new Error(
+      `Spec is ${bytes} bytes, exceeding the ${MAX_SPEC_BYTES}-byte limit. Split it or raise MAX_SPEC_BYTES.`,
+    );
   }
   // YAML is a superset of JSON, so a single YAML parse handles both formats.
   try {
@@ -62,14 +72,20 @@ export function detectFormat(raw: unknown): SourceFormat {
 export async function parseSource(input: SourceInput): Promise<ApiModel> {
   const raw = await loadRawSpec(input);
   const format = !input.format || input.format === "auto" ? detectFormat(raw) : input.format;
+  let model: ApiModel;
   switch (format) {
     case "openapi":
-      return parseOpenApi(raw);
+      model = await parseOpenApi(raw);
+      break;
     case "postman":
-      return parsePostman(raw);
+      model = parsePostman(raw);
+      break;
     default:
       throw new Error(`Unsupported format: ${format as string}`);
   }
+  // Validation gate: emitters trust the model, so reject a malformed one here with a clear error.
+  assertValidApiModel(model);
+  return model;
 }
 
 export const SUPPORTED_FORMATS: SourceFormat[] = ["openapi", "postman"];

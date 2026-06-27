@@ -108,15 +108,23 @@ export function configTs(defaultBaseUrl: string): string {
   ].join("\n");
 }
 
+/** Collapse whitespace/newlines so a spec-derived value can't break out of a `//` comment. */
+function commentSafe(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
 function authBlock(scheme: SecurityScheme): string[] {
   const lines: string[] = [];
   const guard = `  if (security.includes(${JSON.stringify(scheme.name)})) {`;
-  lines.push(`  // ${scheme.name} (${scheme.type}${scheme.scheme ? "/" + scheme.scheme : ""})`);
+  const label = commentSafe(
+    `${scheme.name} (${scheme.type}${scheme.scheme ? "/" + scheme.scheme : ""})`,
+  );
+  lines.push(`  // ${label}`);
   lines.push(guard);
   if (scheme.type === "apiKey") {
     const env = scheme.envVars[0]!;
     const param = scheme.paramName ?? "X-API-Key";
-    lines.push(`    const value = process.env.${env};`);
+    lines.push(`    const value = process.env[${JSON.stringify(env)}];`);
     lines.push("    if (value) {");
     if (scheme.in === "query") {
       lines.push(`      url.searchParams.set(${JSON.stringify(param)}, value);`);
@@ -132,8 +140,8 @@ function authBlock(scheme: SecurityScheme): string[] {
     lines.push("    }");
   } else if (scheme.type === "http" && scheme.scheme?.toLowerCase() === "basic") {
     const [u, p] = scheme.envVars;
-    lines.push(`    const user = process.env.${u};`);
-    lines.push(`    const pass = process.env.${p};`);
+    lines.push(`    const user = process.env[${JSON.stringify(u)}];`);
+    lines.push(`    const pass = process.env[${JSON.stringify(p)}];`);
     lines.push("    if (user && pass) {");
     lines.push(
       '      headers["authorization"] = "Basic " + Buffer.from(user + ":" + pass).toString("base64");',
@@ -142,7 +150,7 @@ function authBlock(scheme: SecurityScheme): string[] {
   } else {
     // http bearer, oauth2, openIdConnect -> pre-obtained token.
     const env = scheme.envVars[0]!;
-    lines.push(`    const value = process.env.${env};`);
+    lines.push(`    const value = process.env[${JSON.stringify(env)}];`);
     lines.push('    if (value) headers["authorization"] = "Bearer " + value;');
   }
   lines.push("  }");
@@ -305,7 +313,7 @@ export function serverTs(name: string, version: string): string {
     '      return { content: [{ type: "text", text }] };',
     "    } catch (err) {",
     "      return {",
-    '        content: [{ type: "text", text: "Error: " + (err as Error).message }],',
+    '        content: [{ type: "text", text: "Error: " + (err instanceof Error ? err.message : String(err)) }],',
     "        isError: true,",
     "      };",
     "    }",
