@@ -18,11 +18,13 @@ import {
   writeManifest,
   MANIFEST_FILENAME,
   MANIFEST_VERSION,
+  type Language,
   type ManifestTool,
   type TranslatorManifest,
 } from "../manifest.js";
 import { GENERATOR_NAME, GENERATOR_VERSION } from "../version.js";
 import * as t from "./templates.js";
+import * as py from "./python.js";
 
 export interface GenerateOptions {
   outputDir: string;
@@ -31,6 +33,8 @@ export interface GenerateOptions {
   transport?: t.Transport;
   filters?: FilterOptions;
   force?: boolean;
+  /** Output language; defaults to "typescript". */
+  language?: Language;
 }
 
 export interface AppendOptions {
@@ -201,6 +205,43 @@ async function emitShared(
   await fw.write("src/tools/index.ts", t.toolsIndexTs(allToolNames));
 }
 
+/** Write a complete Python MCP-server project (parallel to {@link emitShared} for TypeScript). */
+async function emitPythonProject(
+  fw: FileWriter,
+  serverName: string,
+  serverVersion: string,
+  description: string,
+  servers: string[],
+  schemes: SecurityScheme[],
+  tools: t.ToolEmit[],
+): Promise<void> {
+  const baseUrl = servers[0] ?? "";
+  const pkg = py.toPackageModule(serverName);
+  await fw.write("pyproject.toml", py.pyprojectToml(serverName, serverVersion, pkg));
+  await fw.write(".gitignore", py.gitignorePy());
+  await fw.write(".env.example", t.envExample(baseUrl, schemes));
+  await fw.write("Dockerfile", py.dockerfilePy(pkg));
+  await fw.write("server.json", t.serverJson(serverName, serverVersion, description));
+  await fw.write(
+    "README.md",
+    py.readmePy({ serverName, pkg, apiTitle: description, toolCount: tools.length, schemes }),
+  );
+  await fw.write(`${pkg}/__init__.py`, py.initPy());
+  await fw.write(`${pkg}/config.py`, py.configPy(baseUrl));
+  await fw.write(`${pkg}/auth.py`, py.authPy(schemes));
+  await fw.write(`${pkg}/http_client.py`, py.httpClientPy());
+  await fw.write(`${pkg}/server.py`, py.serverPy(serverName));
+  await fw.write(`${pkg}/__main__.py`, py.mainPy());
+  await fw.write(`${pkg}/tools.py`, py.toolsPy());
+  const toolData = tools.map((tool) => ({
+    name: tool.name,
+    description: tool.description,
+    inputSchema: tool.inputSchema,
+    plan: tool.plan,
+  }));
+  await fw.write(`${pkg}/tools.json`, JSON.stringify(toolData, null, 2) + "\n");
+}
+
 export async function generateProject(
   model: ApiModel,
   options: GenerateOptions,
@@ -219,6 +260,7 @@ export async function generateProject(
   const serverName = options.serverName ?? toPackageName(model.title);
   const serverVersion = options.serverVersion ?? model.version ?? "0.1.0";
   const transport = options.transport ?? "stdio";
+  const language: Language = options.language ?? "typescript";
   const description = model.title + (model.version ? ` (v${model.version})` : "");
 
   const { operations, filteredOut } = curate(model, options.filters ?? {});
@@ -226,19 +268,31 @@ export async function generateProject(
   const tools = operations.map((op) => operationToToolEmit(op, model.title));
 
   const fw = new FileWriter(dir);
-  await emitShared(
-    fw,
-    serverName,
-    serverVersion,
-    description,
-    model.servers,
-    model.securitySchemes,
-    transport,
-    tools.map((tool) => tool.name),
-    tools.length,
-  );
-  for (const tool of tools) {
-    await fw.write(`src/tools/${tool.name}.ts`, t.toolFileTs(tool));
+  if (language === "python") {
+    await emitPythonProject(
+      fw,
+      serverName,
+      serverVersion,
+      description,
+      model.servers,
+      model.securitySchemes,
+      tools,
+    );
+  } else {
+    await emitShared(
+      fw,
+      serverName,
+      serverVersion,
+      description,
+      model.servers,
+      model.securitySchemes,
+      transport,
+      tools.map((tool) => tool.name),
+      tools.length,
+    );
+    for (const tool of tools) {
+      await fw.write(`src/tools/${tool.name}.ts`, t.toolFileTs(tool));
+    }
   }
 
   const manifest: TranslatorManifest = {
@@ -248,6 +302,7 @@ export async function generateProject(
     serverName,
     serverVersion,
     description,
+    language,
     transport,
     servers: model.servers,
     securitySchemes: model.securitySchemes,
@@ -296,6 +351,12 @@ export async function appendToProject(
   if ((manifest.manifestVersion ?? 1) > MANIFEST_VERSION) {
     throw new Error(
       `${MANIFEST_FILENAME} is schema version ${manifest.manifestVersion}, newer than this generator supports (${MANIFEST_VERSION}). Upgrade mcp-api-translator.`,
+    );
+  }
+  // Append currently regenerates TypeScript infrastructure only.
+  if ((manifest.language ?? "typescript") !== "typescript") {
+    throw new Error(
+      `extend_mcp_server currently supports TypeScript projects only (this project is ${manifest.language}). Re-generate to add operations.`,
     );
   }
 

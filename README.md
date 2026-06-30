@@ -55,7 +55,7 @@ All spec inputs accept inline text (`spec`) or a local path (`specPath`), JSON o
 ## Two ways to use a spec: generate, or serve
 
 - **Generate** ownable code (`generate_mcp_server`) when you want a project you can hand-edit,
-  self-host, and own.
+  self-host, and own — in **TypeScript** (default) or **Python** (`language: "python"`).
 - **Serve** a live runtime proxy when you just want an API exposed to an agent **now**, with no
   generated files to build or maintain:
 
@@ -112,6 +112,7 @@ client-config.md        # paste-ready Claude / Cursor / Codex config
 ## Assumptions & limitations
 
 - **Inputs:** OpenAPI 3.0/3.1 and Postman v2.1 (Swagger 2.0 best-effort). No GraphQL/gRPC yet.
+- **Output languages:** TypeScript (default) and Python. `extend_mcp_server` is TypeScript-only for now.
 - **Output quality tracks spec quality** — missing `operationId`s/descriptions yield weaker tool
   names and docs. Curation helps; it can't invent semantics.
 - **Auth:** API key / bearer / basic / pre-obtained OAuth token, all read from env. **No interactive

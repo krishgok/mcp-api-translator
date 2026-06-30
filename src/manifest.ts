@@ -32,11 +32,16 @@ export interface ManifestSource {
   addedAt: string;
 }
 
+/** Output language of a generated project. */
+export type Language = "typescript" | "python";
+
 export interface TranslatorManifest {
   /** Schema version of this manifest file; see {@link MANIFEST_VERSION}. */
   manifestVersion: number;
   generator: string;
   generatorVersion: string;
+  /** Output language; absent on legacy (pre-Python) manifests, treated as "typescript". */
+  language?: Language;
   serverName: string;
   serverVersion: string;
   description?: string;

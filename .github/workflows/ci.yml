@@ -20,6 +20,8 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - name: Smoke-test the runtime proxy (serve mode)
+        run: npm run smoke:serve
 
   generated-output:
     # Proves the code we emit is itself valid: generate a project, then compile it.
@@ -30,11 +32,16 @@ jobs:
         with:
           node-version: 20
           cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - run: npm ci
       - run: npm run build
       - run: npm run e2e
-      - name: Install & typecheck the generated project
+      - name: Install & typecheck the generated TypeScript project
         working-directory: build/e2e-out
         run: |
           npm install
           npx tsc
+      - name: Generate & compile the Python project
+        run: npm run e2e:python

@@ -180,9 +180,11 @@ Next steps:
 
 Useful options:
 
+- `language` — `"typescript"` (default) or `"python"`. Python emits a package using the low-level
+  MCP Python SDK + stdlib `urllib` (run with `pip install -e . && python -m <pkg>`).
 - `serverName` — npm/package name (defaults from the API title).
-- `transport` — `"stdio"` (default), `"http"`, or `"both"`. `http`/`both` also emits
-  `src/index.http.ts` (Streamable HTTP on `PORT`, default 3000, at `/mcp`).
+- `transport` — `"stdio"` (default), `"http"`, or `"both"` (TypeScript only). `http`/`both` also
+  emits `src/index.http.ts` (Streamable HTTP on `PORT`, default 3000, at `/mcp`).
 - `force: true` — overwrite a non-empty / existing directory.
 
 ### What the generated project looks like

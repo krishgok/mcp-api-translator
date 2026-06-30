@@ -94,12 +94,14 @@ Multi-API `serve`/`generate` currently shares `API_BASE_URL`. Add per-source ove
 (e.g. `API_BASE_URL__<slug>`) and ensure env-var namespacing prevents credential collisions across
 APIs. Needed before multi-API aggregation is production-grade.
 
-### R3. Non-TypeScript output (Python first)
+### R3. Non-TypeScript output (Python first) — **implemented (generate path)**
 
-The largest lever for reach. Add a parallel emitter under `src/emitters/python/` producing a FastMCP
-or low-level-SDK Python project from the same `ApiModel`. The parser→IR→curation layers are reused
-unchanged; only templates + a language flag on `generate_mcp_server` are new. Manifest gains a
-`language` field. Scoped as its own milestone (~400–600 LOC of templates + an e2e compile check).
+Shipped: `generate_mcp_server` accepts `language: "python"` and emits a package built on the
+low-level MCP Python SDK + stdlib `urllib`, with env-based auth and raw JSON-Schema tool inputs
+(`src/emitters/python.ts`). The parser→IR→curation layers are reused unchanged; the manifest carries
+a `language` field. CI generates a Python project and `py_compile`s it (`npm run e2e:python`).
+**Still open:** `extend_mcp_server` for Python projects (append currently rejects non-TS projects),
+and a FastMCP-flavored variant.
 
 ### R4. Hosted / one-command deploy (optional, non-core)
 
