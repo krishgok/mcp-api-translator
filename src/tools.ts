@@ -194,6 +194,11 @@ export function registerTools(server: McpServer): void {
       const features = {
         inputFormats: SUPPORTED_FORMATS,
         outputLanguage: "typescript",
+        modes: {
+          generate: "Scaffold an ownable TypeScript MCP-server project (generate_mcp_server).",
+          serve:
+            "Run a live runtime proxy, no codegen: `mcp-api-translator serve --spec <path>` mounts the spec's operations as MCP tools in-process (repeat --spec to aggregate multiple APIs).",
+        },
         transports: ["stdio", "http", "both"],
         authSchemes: [
           "apiKey (header/query/cookie)",

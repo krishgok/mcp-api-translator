@@ -52,6 +52,23 @@ FastMCP's runtime mode may suit you better — that's a deliberate non-goal here
 
 All spec inputs accept inline text (`spec`) or a local path (`specPath`), JSON or YAML.
 
+## Two ways to use a spec: generate, or serve
+
+- **Generate** ownable code (`generate_mcp_server`) when you want a project you can hand-edit,
+  self-host, and own.
+- **Serve** a live runtime proxy when you just want an API exposed to an agent **now**, with no
+  generated files to build or maintain:
+
+  ```bash
+  mcp-api-translator serve --spec ./api.yaml          # mount one API as live MCP tools
+  mcp-api-translator serve --spec ./a.yaml --spec ./b.yaml --methods GET,POST   # aggregate several
+  ```
+
+  `serve` runs the same request plan and env-based auth the generator would emit, so behavior matches
+  generated output exactly — it just skips the codegen step. See
+  [docs/serve-api-proposal.md](docs/serve-api-proposal.md) for the design and
+  [docs/market-analysis.md](docs/market-analysis.md) for why both models exist.
+
 ## Quickstart
 
 ```bash
@@ -101,7 +118,8 @@ client-config.md        # paste-ready Claude / Cursor / Codex config
   OAuth flows or token refresh** in v1.
 - **Responses** are returned as JSON/text; no upstream streaming or automatic pagination.
 - **Postman** parameter types are inferred from examples (Postman carries no formal schema).
-- **Not a hosted service** and **no live in-memory proxy** in v1 — it generates code you run.
+- **Not a hosted service.** It runs locally/self-hosted: `generate` ownable code, or `serve` a live
+  in-process proxy. (No managed cloud offering — see [docs/serve-api-proposal.md](docs/serve-api-proposal.md) roadmap.)
 
 ## Security & trust model
 

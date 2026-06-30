@@ -1,0 +1,188 @@
+import { describe, it, expect } from "vitest";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+import { parseSource } from "../src/parsers/index.js";
+import { executePlan, type FetchLike } from "../src/runtime/client.js";
+import { ApiProxy } from "../src/runtime/server.js";
+import { parseServeArgs } from "../src/runtime/cli.js";
+import type { RequestPlanData } from "../src/emitters/templates.js";
+
+const fixtures = path.dirname(fileURLToPath(import.meta.url)) + "/fixtures";
+
+/** A fetch stub that records the last request and returns a canned response. */
+function recorder(status = 200, bodyText = "{}") {
+  const calls: Array<{
+    url: string;
+    method: string;
+    headers: Record<string, string>;
+    body?: string;
+  }> = [];
+  const fetchImpl: FetchLike = async (url, init) => {
+    calls.push({
+      url: url.toString(),
+      method: init.method,
+      headers: init.headers,
+      body: init.body,
+    });
+    return {
+      ok: status >= 200 && status < 300,
+      status,
+      statusText: status === 200 ? "OK" : "ERR",
+      text: async () => bodyText,
+    };
+  };
+  return { calls, fetchImpl };
+}
+
+describe("executePlan", () => {
+  const plan: RequestPlanData = {
+    method: "GET",
+    pathTemplate: "/pets/{petId}",
+    pathParams: ["petId"],
+    queryParams: ["limit"],
+    headerParams: [],
+    bodyParam: null,
+    contentType: null,
+    security: ["apiKey"],
+  };
+
+  it("substitutes path params (encoded), adds query, and injects apiKey header from env", async () => {
+    const { calls, fetchImpl } = recorder(200, '{"ok":true}');
+    const out = await executePlan(
+      plan,
+      { petId: "a/b c", limit: 5 },
+      {
+        baseUrl: "https://api.example.com/v1",
+        securitySchemes: [
+          {
+            name: "apiKey",
+            type: "apiKey",
+            in: "header",
+            paramName: "X-API-Key",
+            envVars: ["API_KEY"],
+          },
+        ],
+        env: { API_KEY: "secret123" },
+      },
+      fetchImpl,
+    );
+    expect(out).toBe('{"ok":true}');
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe("https://api.example.com/v1/pets/a%2Fb%20c?limit=5");
+    expect(calls[0]!.headers["X-API-Key"]).toBe("secret123");
+  });
+
+  it("omits the credential when the env var is unset", async () => {
+    const { calls, fetchImpl } = recorder();
+    await executePlan(
+      plan,
+      { petId: "1" },
+      {
+        baseUrl: "https://api.example.com",
+        securitySchemes: [
+          {
+            name: "apiKey",
+            type: "apiKey",
+            in: "header",
+            paramName: "X-API-Key",
+            envVars: ["API_KEY"],
+          },
+        ],
+        env: {},
+      },
+      fetchImpl,
+    );
+    expect(calls[0]!.headers["X-API-Key"]).toBeUndefined();
+  });
+
+  it("throws with status and body on a non-2xx response", async () => {
+    const { fetchImpl } = recorder(404, "not found");
+    await expect(
+      executePlan(
+        plan,
+        { petId: "1" },
+        { baseUrl: "https://api.example.com", securitySchemes: [], env: {} },
+        fetchImpl,
+      ),
+    ).rejects.toThrow(/HTTP 404 .*not found/);
+  });
+
+  it("requires a base URL", async () => {
+    const { fetchImpl } = recorder();
+    await expect(
+      executePlan(plan, { petId: "1" }, { baseUrl: "", securitySchemes: [], env: {} }, fetchImpl),
+    ).rejects.toThrow(/base URL is not set/);
+  });
+});
+
+describe("ApiProxy", () => {
+  it("mounts a spec, lists its tools, and executes one against the upstream", async () => {
+    const model = await parseSource({ specPath: `${fixtures}/petstore.openapi.yaml` });
+    const proxy = new ApiProxy();
+    const result = proxy.mount(model);
+    expect(result.mounted).toBe(3);
+    expect(
+      proxy
+        .listTools()
+        .map((t) => t.name)
+        .sort(),
+    ).toEqual(["createPet", "getPetById", "listPets"]);
+    // Each tool advertises a raw JSON-Schema input.
+    expect(proxy.listTools()[0]!.inputSchema).toMatchObject({ type: "object" });
+
+    const { calls, fetchImpl } = recorder(200, '{"id":7}');
+    const out = await proxy.call("getPetById", { petId: 7 }, { API_KEY: "k" }, fetchImpl);
+    expect(out).toBe('{"id":7}');
+    expect(calls[0]!.url).toContain("/pets/7");
+    expect(calls[0]!.headers["X-API-Key"]).toBe("k");
+  });
+
+  it("honors API_BASE_URL as a runtime override of the spec server", async () => {
+    const model = await parseSource({ specPath: `${fixtures}/petstore.openapi.yaml` });
+    const proxy = new ApiProxy();
+    proxy.mount(model);
+    const { calls, fetchImpl } = recorder();
+    await proxy.call("listPets", {}, { API_BASE_URL: "https://staging.local" }, fetchImpl);
+    expect(calls[0]!.url.startsWith("https://staging.local/")).toBe(true);
+  });
+
+  it("aggregates multiple APIs and dedupes tool names across mounts", async () => {
+    const petstore = await parseSource({ specPath: `${fixtures}/petstore.openapi.yaml` });
+    const echo = await parseSource({ specPath: `${fixtures}/echo.postman.json` });
+    const proxy = new ApiProxy();
+    const a = proxy.mount(petstore);
+    const b = proxy.mount(echo);
+    expect(proxy.size).toBe(a.mounted + b.mounted);
+    // No name collisions across the two mounted APIs.
+    expect(new Set(proxy.listTools().map((t) => t.name)).size).toBe(proxy.size);
+  });
+});
+
+describe("parseServeArgs", () => {
+  it("parses specs and filters", () => {
+    const args = parseServeArgs([
+      "--spec",
+      "a.yaml",
+      "--spec",
+      "b.json",
+      "--methods",
+      "GET,POST",
+      "--include-tag",
+      "pets",
+      "--path-glob",
+      "/v1/**",
+    ]);
+    expect(args.specs).toEqual(["a.yaml", "b.json"]);
+    expect(args.filters.methods).toEqual(["GET", "POST"]);
+    expect(args.filters.includeTags).toEqual(["pets"]);
+    expect(args.filters.pathGlob).toBe("/v1/**");
+  });
+
+  it("requires at least one --spec", () => {
+    expect(() => parseServeArgs([])).toThrow(/requires at least one --spec/);
+  });
+
+  it("rejects an unknown option", () => {
+    expect(() => parseServeArgs(["--nope"])).toThrow(/Unknown serve option/);
+  });
+});

@@ -326,6 +326,49 @@ publish so AI clients can discover your server:
 
 ---
 
+## Alternative path — serve a live proxy (no codegen)
+
+If you don't need an ownable codebase and just want an API exposed to your agent **right now**, skip
+generation entirely and run a runtime proxy:
+
+```bash
+# Mount one API as live MCP tools (no files written)
+mcp-api-translator serve --spec ./petstore.yaml
+
+# Aggregate several APIs into one proxy, with the same curation filters
+mcp-api-translator serve --spec ./petstore.yaml --spec ./billing.yaml \
+  --methods GET,POST --include-tag pets --path-glob "/v1/**"
+```
+
+Point your MCP client at the proxy instead of a generated project:
+
+```json
+{
+  "mcpServers": {
+    "apis": {
+      "command": "mcp-api-translator",
+      "args": ["serve", "--spec", "/abs/path/petstore.yaml"],
+      "env": { "API_BASE_URL": "https://petstore.example.com/v1", "API_KEY": "sk_live_xxx" }
+    }
+  }
+}
+```
+
+The proxy runs the **same request plan and env-based auth** the generator would have emitted, so a
+mounted tool behaves identically to the generated one — it just skips writing code.
+
+**Generate vs. serve:**
+
+|                                   | `generate_mcp_server`                    | `serve`                                   |
+| --------------------------------- | ---------------------------------------- | ----------------------------------------- |
+| Output                            | an ownable TypeScript project            | nothing on disk; live in-process tools    |
+| Edit behavior by hand?            | yes                                      | no (regenerate/serve to change)           |
+| Stays in sync as the spec changes | re-generate / `extend`                   | re-launch with the new spec               |
+| Best for                          | owned, customizable, self-hosted servers | fast exposure, prototyping, internal APIs |
+
+Curation filters, env-based auth, and multi-API aggregation work the same in both modes. See
+[serve-api-proposal.md](serve-api-proposal.md) for the design and roadmap.
+
 ## End-to-end at a glance
 
 ```
