@@ -133,10 +133,14 @@ export function registerTools(server: McpServer): void {
           .optional()
           .describe("npm/package name; defaults from the API title."),
         serverVersion: z.string().optional(),
+        language: z
+          .enum(["typescript", "python"])
+          .optional()
+          .describe("Output language. Defaults to typescript."),
         transport: z
           .enum(["stdio", "http", "both"])
           .optional()
-          .describe("Transport(s) to generate. Defaults to stdio."),
+          .describe("Transport(s) to generate (TypeScript only). Defaults to stdio."),
         force: z.boolean().optional().describe("Overwrite a non-empty / existing project."),
         ...filterShape,
       },
@@ -147,6 +151,7 @@ export function registerTools(server: McpServer): void {
         outputDir: args.outputDir as string,
         serverName: args.serverName as string | undefined,
         serverVersion: args.serverVersion as string | undefined,
+        language: args.language as "typescript" | "python" | undefined,
         transport: args.transport as "stdio" | "http" | "both" | undefined,
         force: args.force as boolean | undefined,
         filters: filtersFrom(args),
@@ -193,7 +198,12 @@ export function registerTools(server: McpServer): void {
     async (): Promise<CallToolResult> => {
       const features = {
         inputFormats: SUPPORTED_FORMATS,
-        outputLanguage: "typescript",
+        outputLanguages: ["typescript", "python"],
+        modes: {
+          generate: "Scaffold an ownable TypeScript MCP-server project (generate_mcp_server).",
+          serve:
+            "Run a live runtime proxy, no codegen: `mcp-api-translator serve --spec <path>` mounts the spec's operations as MCP tools in-process (repeat --spec to aggregate multiple APIs).",
+        },
         transports: ["stdio", "http", "both"],
         authSchemes: [
           "apiKey (header/query/cookie)",

@@ -3,4 +3,6 @@ export { parseSource, detectFormat, SUPPORTED_FORMATS } from "./parsers/index.js
 export { validateApiModel, assertValidApiModel } from "./ir/validate.js";
 export { generateProject, appendToProject } from "./emitters/project.js";
 export { createServer } from "./server.js";
+export { ApiProxy, createProxyServer } from "./runtime/server.js";
+export { executePlan } from "./runtime/client.js";
 export type { ApiModel } from "./ir/model.js";
