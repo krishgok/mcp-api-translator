@@ -5,7 +5,7 @@
  * adds only operations not already present (idempotent), regenerates shared infrastructure from
  * the merged model, and never rewrites hand-edited tool files unless `force` is set.
  */
-import { mkdir, writeFile, readdir, access } from "node:fs/promises";
+import { mkdir, writeFile, readFile, readdir, access } from "node:fs/promises";
 import path from "node:path";
 import type { ApiModel, JsonSchema, Operation, SecurityScheme } from "../ir/model.js";
 import { buildDescription } from "../curation/describe.js";
@@ -205,15 +205,35 @@ async function emitShared(
   await fw.write("src/tools/index.ts", t.toolsIndexTs(allToolNames));
 }
 
-/** Write a complete Python MCP-server project (parallel to {@link emitShared} for TypeScript). */
-async function emitPythonProject(
+/** A serialized tool record stored in a Python project's tools.json. */
+type PyToolRecord = { name: string; description: string; inputSchema: unknown; plan: unknown };
+
+function toPyToolRecord(tool: t.ToolEmit): PyToolRecord {
+  return {
+    name: tool.name,
+    description: tool.description,
+    inputSchema: tool.inputSchema,
+    plan: tool.plan,
+  };
+}
+
+/** Path to a Python project's tool-data file, relative to the project root. */
+function pythonToolsJsonPath(serverName: string): string {
+  return `${py.toPackageModule(serverName)}/tools.json`;
+}
+
+/**
+ * Write the shared Python infrastructure (everything except tools.json) from the merged model.
+ * Parallel to {@link emitShared} for TypeScript; reused by fresh generation and append.
+ */
+async function emitPythonShared(
   fw: FileWriter,
   serverName: string,
   serverVersion: string,
   description: string,
   servers: string[],
   schemes: SecurityScheme[],
-  tools: t.ToolEmit[],
+  toolCount: number,
 ): Promise<void> {
   const baseUrl = servers[0] ?? "";
   const pkg = py.toPackageModule(serverName);
@@ -224,7 +244,7 @@ async function emitPythonProject(
   await fw.write("server.json", t.serverJson(serverName, serverVersion, description));
   await fw.write(
     "README.md",
-    py.readmePy({ serverName, pkg, apiTitle: description, toolCount: tools.length, schemes }),
+    py.readmePy({ serverName, pkg, apiTitle: description, toolCount, schemes }),
   );
   await fw.write(`${pkg}/__init__.py`, py.initPy());
   await fw.write(`${pkg}/config.py`, py.configPy(baseUrl));
@@ -233,13 +253,6 @@ async function emitPythonProject(
   await fw.write(`${pkg}/server.py`, py.serverPy(serverName));
   await fw.write(`${pkg}/__main__.py`, py.mainPy());
   await fw.write(`${pkg}/tools.py`, py.toolsPy());
-  const toolData = tools.map((tool) => ({
-    name: tool.name,
-    description: tool.description,
-    inputSchema: tool.inputSchema,
-    plan: tool.plan,
-  }));
-  await fw.write(`${pkg}/tools.json`, JSON.stringify(toolData, null, 2) + "\n");
 }
 
 export async function generateProject(
@@ -269,14 +282,18 @@ export async function generateProject(
 
   const fw = new FileWriter(dir);
   if (language === "python") {
-    await emitPythonProject(
+    await emitPythonShared(
       fw,
       serverName,
       serverVersion,
       description,
       model.servers,
       model.securitySchemes,
-      tools,
+      tools.length,
+    );
+    await fw.write(
+      pythonToolsJsonPath(serverName),
+      JSON.stringify(tools.map(toPyToolRecord), null, 2) + "\n",
     );
   } else {
     await emitShared(
@@ -353,12 +370,7 @@ export async function appendToProject(
       `${MANIFEST_FILENAME} is schema version ${manifest.manifestVersion}, newer than this generator supports (${MANIFEST_VERSION}). Upgrade mcp-api-translator.`,
     );
   }
-  // Append currently regenerates TypeScript infrastructure only.
-  if ((manifest.language ?? "typescript") !== "typescript") {
-    throw new Error(
-      `extend_mcp_server currently supports TypeScript projects only (this project is ${manifest.language}). Re-generate to add operations.`,
-    );
-  }
+  const language: Language = manifest.language ?? "typescript";
 
   // Merge servers and security schemes.
   const servers = [...new Set([...manifest.servers, ...model.servers])];
@@ -383,25 +395,53 @@ export async function appendToProject(
   assertToolCount(allToolNames.length);
 
   const fw = new FileWriter(dir);
-  await emitShared(
-    fw,
-    manifest.serverName,
-    manifest.serverVersion,
-    manifest.description ?? manifest.serverName,
-    servers,
-    schemes,
-    manifest.transport,
-    allToolNames,
-    allToolNames.length,
-  );
+  const description = manifest.description ?? manifest.serverName;
   let skippedFiles = 0;
-  for (const tool of newTools) {
-    const wrote = await fw.writeIfAbsent(
-      `src/tools/${tool.name}.ts`,
-      t.toolFileTs(tool),
-      options.force ?? false,
+  if (language === "python") {
+    // Python keeps all tool data in one tools.json; merge new records into the existing ones
+    // (preserving any hand-edits to existing entries) and regenerate the shared infrastructure.
+    const toolsJson = pythonToolsJsonPath(manifest.serverName);
+    let existingRecords: PyToolRecord[];
+    try {
+      existingRecords = JSON.parse(
+        await readFile(path.join(dir, toolsJson), "utf8"),
+      ) as PyToolRecord[];
+    } catch {
+      throw new Error(
+        `${path.join(dir, toolsJson)} is missing or unreadable; cannot extend this Python project.`,
+      );
+    }
+    const allRecords = [...existingRecords, ...newTools.map(toPyToolRecord)];
+    await emitPythonShared(
+      fw,
+      manifest.serverName,
+      manifest.serverVersion,
+      description,
+      servers,
+      schemes,
+      allRecords.length,
     );
-    if (!wrote) skippedFiles++;
+    await fw.write(toolsJson, JSON.stringify(allRecords, null, 2) + "\n");
+  } else {
+    await emitShared(
+      fw,
+      manifest.serverName,
+      manifest.serverVersion,
+      description,
+      servers,
+      schemes,
+      manifest.transport,
+      allToolNames,
+      allToolNames.length,
+    );
+    for (const tool of newTools) {
+      const wrote = await fw.writeIfAbsent(
+        `src/tools/${tool.name}.ts`,
+        t.toolFileTs(tool),
+        options.force ?? false,
+      );
+      if (!wrote) skippedFiles++;
+    }
   }
 
   const merged: TranslatorManifest = {

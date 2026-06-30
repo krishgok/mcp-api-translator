@@ -112,7 +112,8 @@ client-config.md        # paste-ready Claude / Cursor / Codex config
 ## Assumptions & limitations
 
 - **Inputs:** OpenAPI 3.0/3.1 and Postman v2.1 (Swagger 2.0 best-effort). No GraphQL/gRPC yet.
-- **Output languages:** TypeScript (default) and Python. `extend_mcp_server` is TypeScript-only for now.
+- **Output languages:** TypeScript (default) and Python. Both support `generate` and
+  `extend_mcp_server` (aggregating multiple APIs into one server).
 - **Output quality tracks spec quality** — missing `operationId`s/descriptions yield weaker tool
   names and docs. Curation helps; it can't invent semantics.
 - **Auth:** API key / bearer / basic / pre-obtained OAuth token, all read from env. **No interactive

@@ -63,11 +63,39 @@ describe("python generation", () => {
     expect(auth).toContain('os.environ.get("API_KEY")');
     expect(auth).not.toContain("secret"); // no embedded credential values
   });
+});
 
-  it("refuses to extend a Python project (TS-only append)", async () => {
+describe("python extend", () => {
+  it("appends another API into tools.json, merges auth, and is idempotent", async () => {
+    const pdir = await mkdtemp(path.join(tmpdir(), "pyext-"));
+    const petstore = await parseSource({ specPath: `${fixtures}/petstore.openapi.yaml` });
+    await generateProject(petstore, { outputDir: pdir, serverName: "agg-py", language: "python" });
+
     const echo = await parseSource({ specPath: `${fixtures}/echo.postman.json` });
-    await expect(appendToProject(echo, { projectDir: dir })).rejects.toThrow(
-      /TypeScript projects only/,
+    const ext = await appendToProject(echo, { projectDir: pdir });
+    expect(ext.toolsAdded).toBe(3);
+    expect(ext.totalTools).toBe(6);
+
+    // tool data merged into the single tools.json
+    const tools = JSON.parse(await read(pdir, "agg_py/tools.json"));
+    expect(tools).toHaveLength(6);
+
+    // both APIs' auth schemes are now wired into the regenerated auth.py
+    const auth = await read(pdir, "agg_py/auth.py");
+    expect(auth).toContain('"apiKey" in security');
+    expect(auth).toContain('"bearerAuth" in security');
+
+    const manifest = await readManifest(pdir);
+    expect(manifest?.language).toBe("python");
+    expect(manifest?.sources).toHaveLength(2);
+    expect(manifest?.securitySchemes.map((s) => s.name).sort()).toEqual(["apiKey", "bearerAuth"]);
+
+    // re-appending the same spec adds nothing
+    const again = await appendToProject(
+      await parseSource({ specPath: `${fixtures}/echo.postman.json` }),
+      { projectDir: pdir },
     );
+    expect(again.toolsAdded).toBe(0);
+    expect(again.totalTools).toBe(6);
   });
 });
