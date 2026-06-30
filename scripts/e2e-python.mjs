@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { rm, readdir } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
-import { parseSource, generateProject } from "../dist/lib.js";
+import { parseSource, generateProject, appendToProject } from "../dist/lib.js";
 
 const root = path.dirname(fileURLToPath(import.meta.url)) + "/..";
 const fixtures = `${root}/test/fixtures`;
@@ -20,6 +20,10 @@ const gen = await generateProject(petstore, {
   language: "python",
 });
 console.log(`generated python: +${gen.toolsAdded} tools, ${gen.files.length} files`);
+
+const echo = await parseSource({ specPath: `${fixtures}/echo.postman.json` });
+const ext = await appendToProject(echo, { projectDir: out });
+console.log(`extended python: +${ext.toolsAdded} tools, total ${ext.totalTools}`);
 
 // Collect every generated .py file and compile it.
 async function pyFiles(dir) {

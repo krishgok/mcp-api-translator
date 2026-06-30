@@ -94,14 +94,16 @@ Multi-API `serve`/`generate` currently shares `API_BASE_URL`. Add per-source ove
 (e.g. `API_BASE_URL__<slug>`) and ensure env-var namespacing prevents credential collisions across
 APIs. Needed before multi-API aggregation is production-grade.
 
-### R3. Non-TypeScript output (Python first) — **implemented (generate path)**
+### R3. Non-TypeScript output (Python first) — **implemented (generate + extend)**
 
 Shipped: `generate_mcp_server` accepts `language: "python"` and emits a package built on the
 low-level MCP Python SDK + stdlib `urllib`, with env-based auth and raw JSON-Schema tool inputs
-(`src/emitters/python.ts`). The parser→IR→curation layers are reused unchanged; the manifest carries
-a `language` field. CI generates a Python project and `py_compile`s it (`npm run e2e:python`).
-**Still open:** `extend_mcp_server` for Python projects (append currently rejects non-TS projects),
-and a FastMCP-flavored variant.
+(`src/emitters/python.ts`). `extend_mcp_server` also works for Python projects: it merges new tools
+into the package's single `tools.json` (preserving existing entries, idempotent by `METHOD path`)
+and regenerates the shared infrastructure from the merged model. The parser→IR→curation layers are
+reused unchanged; the manifest carries a `language` field. CI generates a Python project, appends a
+second API, and `py_compile`s the result (`npm run e2e:python`).
+**Still open:** a FastMCP-flavored variant, and per-API auth namespacing for aggregated APIs (R2).
 
 ### R4. Hosted / one-command deploy (optional, non-core)
 
