@@ -158,6 +158,90 @@ describe("ApiProxy", () => {
   });
 });
 
+describe("per-API auth namespacing", () => {
+  const plan: RequestPlanData = {
+    method: "GET",
+    pathTemplate: "/x",
+    pathParams: [],
+    queryParams: [],
+    headerParams: [],
+    bodyParam: null,
+    contentType: null,
+    security: ["apiKey"],
+  };
+  const schemes = [
+    {
+      name: "apiKey",
+      type: "apiKey" as const,
+      in: "header" as const,
+      paramName: "X-API-Key",
+      envVars: ["API_KEY"],
+    },
+  ];
+
+  it("prefers the namespaced credential over the bare one", async () => {
+    const { calls, fetchImpl } = recorder();
+    await executePlan(
+      plan,
+      {},
+      {
+        baseUrl: "https://h",
+        securitySchemes: schemes,
+        env: { PETSTORE_API_KEY: "ns", API_KEY: "bare" },
+        sourceNamespace: "PETSTORE",
+      },
+      fetchImpl,
+    );
+    expect(calls[0]!.headers["X-API-Key"]).toBe("ns");
+  });
+
+  it("falls back to the bare credential when the namespaced one is unset", async () => {
+    const { calls, fetchImpl } = recorder();
+    await executePlan(
+      plan,
+      {},
+      {
+        baseUrl: "https://h",
+        securitySchemes: schemes,
+        env: { API_KEY: "bare" },
+        sourceNamespace: "PETSTORE",
+      },
+      fetchImpl,
+    );
+    expect(calls[0]!.headers["X-API-Key"]).toBe("bare");
+  });
+
+  it("routes each aggregated API to its own base URL via <NS>_API_BASE_URL", async () => {
+    const petstore = await parseSource({ specPath: `${fixtures}/petstore.openapi.yaml` });
+    const echo = await parseSource({ specPath: `${fixtures}/echo.postman.json` });
+    const proxy = new ApiProxy();
+    proxy.mount(petstore);
+    const echoMount = proxy.mount(echo);
+    const env = {
+      SWAGGER_PETSTORE_API_BASE_URL: "https://pets.local",
+      ECHO_API_API_BASE_URL: "https://echo.local",
+    };
+
+    const pets = recorder();
+    await proxy.call("listPets", {}, env, pets.fetchImpl);
+    expect(pets.calls[0]!.url.startsWith("https://pets.local/")).toBe(true);
+
+    const echoTool = echoMount.toolNames[0]!;
+    const ech = recorder();
+    await proxy.call(echoTool, {}, env, ech.fetchImpl);
+    expect(ech.calls[0]!.url.startsWith("https://echo.local/")).toBe(true);
+  });
+
+  it("reports the source namespace and per-source env vars from mount()", async () => {
+    const petstore = await parseSource({ specPath: `${fixtures}/petstore.openapi.yaml` });
+    const proxy = new ApiProxy();
+    const res = proxy.mount(petstore);
+    expect(res.sourceNamespace).toBe("SWAGGER_PETSTORE");
+    expect(res.envVars).toContain("SWAGGER_PETSTORE_API_BASE_URL");
+    expect(res.envVars).toContain("SWAGGER_PETSTORE_API_KEY");
+  });
+});
+
 describe("parseServeArgs", () => {
   it("parses specs and filters", () => {
     const args = parseServeArgs([

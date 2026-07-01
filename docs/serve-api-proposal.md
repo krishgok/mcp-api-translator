@@ -63,9 +63,9 @@ Reusing `operationToToolEmit` is the key decision: the served tool's schema and 
 ## Credentials & base URL
 
 - Secrets are read from env at **call time**, never stored (same model as generated output).
-- Base URL per tool = `API_BASE_URL` (override) ?? that API's first declared server. For multi-API
-  aggregation, each API keeps its own spec server unless `API_BASE_URL` overrides all of them.
-  (Roadmap: per-API base-URL overrides — see below.)
+- Base URL per tool = `<NS>_API_BASE_URL` ?? `API_BASE_URL` ?? that API's first declared server;
+  credentials = `<NS>_<VAR>` ?? bare `<VAR>`, where `<NS>` is the source's env namespace. This lets
+  aggregated APIs use distinct base URLs/credentials without collision (see R2).
 
 ## Verification
 
@@ -88,11 +88,16 @@ keep descriptions tight and disambiguated (already done in `describe.ts`); optio
 machine-readable tool catalog (name → summary → tags) so a discovery layer can rank tools. Low effort,
 high alignment with where clients are heading.
 
-### R2. Per-API base URL + auth namespacing for aggregation
+### R2. Per-API base URL + auth namespacing for aggregation — **implemented (runtime `serve`)**
 
-Multi-API `serve`/`generate` currently shares `API_BASE_URL`. Add per-source overrides
-(e.g. `API_BASE_URL__<slug>`) and ensure env-var namespacing prevents credential collisions across
-APIs. Needed before multi-API aggregation is production-grade.
+Shipped for the runtime proxy: each mounted API gets an env namespace derived from its title
+(`envNamespace`, e.g. `SWAGGER_PETSTORE`). A tool resolves its base URL as
+`<NS>_API_BASE_URL` → `API_BASE_URL` → the spec's server, and each credential as `<NS>_<VAR>` →
+bare `<VAR>`. So aggregating two APIs that both use `API_KEY` no longer collides — set
+`PETSTORE_API_KEY` and `BILLING_API_KEY` — while a single-API proxy is unchanged (bare vars still
+work via fallback). `serve` prints each API's namespaced vars when aggregating.
+**Still open:** the same namespacing in _generated_ output (`generate`/`extend`) — owners can
+hand-edit `auth.ts`/`config.ts` meanwhile, so runtime was prioritized.
 
 ### R3. Non-TypeScript output (Python first) — **implemented (generate + extend)**
 
