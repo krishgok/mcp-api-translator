@@ -117,10 +117,15 @@ compete with Gram/Zuplo on convenience. This is ops/product, not a library chang
 optional so the OSS tool remains self-hostable and dependency-light. Document a Dockerized `serve`
 recipe first (cheapest 80%).
 
-### R5. OAuth client-credentials / refresh
+### R5. OAuth client-credentials — **implemented**
 
-Today auth is env-supplied tokens only. Add a client-credentials grant (fetch + cache a token) for
-both runtime and generated output, behind an opt-in, to cover APIs that don't accept static tokens.
+Shipped for runtime **and** generated output (TS + Python). When a spec declares an OAuth2
+`clientCredentials` flow, the parser captures its `tokenUrl` and assigns `API_CLIENT_ID` /
+`API_CLIENT_SECRET` env vars (instead of `API_TOKEN`). At call time the proxy / generated `auth`
+module exchanges the id+secret for a bearer token (`grant_type=client_credentials`) and caches it
+until ~30s before expiry. Verified live through `serve` (token fetched, `Bearer` injected) and by
+compiling the generated async-auth TS + Python in CI. **Still open:** authorization-code /
+interactive flows (a non-goal), and refresh-token grants.
 
 ## Non-goals (still)
 

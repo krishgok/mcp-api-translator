@@ -110,6 +110,24 @@ describe("guards", () => {
   });
 });
 
+describe("oauth client-credentials (typescript)", () => {
+  it("emits an async applyAuth that fetches a token from the client-credentials endpoint", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "mcpgen-"));
+    const model = await parseSource({ specPath: `${fixtures}/oauth.openapi.yaml` });
+    await generateProject(model, { outputDir: dir });
+    const auth = await read(dir, "src/auth.ts");
+    expect(auth).toContain("async function getClientCredentialsToken");
+    expect(auth).toContain("export async function applyAuth");
+    expect(auth).toContain('process.env["API_CLIENT_ID"]');
+    expect(auth).toContain("grant_type");
+    const env = await read(dir, ".env.example");
+    expect(env).toContain("API_CLIENT_ID=");
+    expect(env).toContain("API_CLIENT_SECRET=");
+    // the generated client must await the (now async) applyAuth
+    expect(await read(dir, "src/http/client.ts")).toContain("await applyAuth(");
+  });
+});
+
 describe("hardening", () => {
   it("does not let a spec-derived scheme name break out of a generated comment", async () => {
     // A hostile security-scheme key containing a newline + code payload.

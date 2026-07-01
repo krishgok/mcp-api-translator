@@ -147,6 +147,17 @@ function authBlock(scheme: SecurityScheme): string[] {
       '      headers["authorization"] = "Basic " + Buffer.from(user + ":" + pass).toString("base64");',
     );
     lines.push("    }");
+  } else if (scheme.tokenUrl) {
+    // oauth2 client-credentials: exchange a client id/secret for a bearer token.
+    const [id, secret] = scheme.envVars;
+    lines.push(`    const clientId = process.env[${JSON.stringify(id)}];`);
+    lines.push(`    const clientSecret = process.env[${JSON.stringify(secret)}];`);
+    lines.push("    if (clientId && clientSecret) {");
+    lines.push(
+      `      const token = await getClientCredentialsToken(${JSON.stringify(scheme.tokenUrl)}, clientId, clientSecret);`,
+    );
+    lines.push('      headers["authorization"] = "Bearer " + token;');
+    lines.push("    }");
   } else {
     // http bearer, oauth2, openIdConnect -> pre-obtained token.
     const env = scheme.envVars[0]!;
@@ -157,17 +168,66 @@ function authBlock(scheme: SecurityScheme): string[] {
   return lines;
 }
 
+/** Emitted token fetch + cache, only when a client-credentials scheme is present. */
+function oauthHelperTs(): string[] {
+  return [
+    "const _tokenCache = new Map<string, { token: string; expiresAt: number }>();",
+    "",
+    "async function getClientCredentialsToken(",
+    "  tokenUrl: string,",
+    "  clientId: string,",
+    "  clientSecret: string,",
+    "): Promise<string> {",
+    '    const key = tokenUrl + "|" + clientId;',
+    "    const hit = _tokenCache.get(key);",
+    "    if (hit && hit.expiresAt > Date.now()) return hit.token;",
+    "    const body = new URLSearchParams({",
+    '      grant_type: "client_credentials",',
+    "      client_id: clientId,",
+    "      client_secret: clientSecret,",
+    "    }).toString();",
+    "    const res = await fetch(tokenUrl, {",
+    '      method: "POST",',
+    '      headers: { "content-type": "application/x-www-form-urlencoded" },',
+    "      body,",
+    "    });",
+    "    const text = await res.text();",
+    "    if (!res.ok)",
+    '      throw new Error("OAuth token request failed: HTTP " + res.status + " " + text.slice(0, 300));',
+    "    const json = JSON.parse(text) as { access_token?: string; expires_in?: number };",
+    '    if (!json.access_token) throw new Error("OAuth token response had no access_token");',
+    '    const ttl = typeof json.expires_in === "number" ? json.expires_in : 3600;',
+    "    _tokenCache.set(key, { token: json.access_token, expiresAt: Date.now() + ttl * 1000 - 30000 });",
+    "    return json.access_token;",
+    "}",
+    "",
+  ];
+}
+
 export function authTs(schemes: SecurityScheme[]): string {
   const body = schemes.flatMap(authBlock);
+  const hasOAuth = schemes.some((s) => s.tokenUrl);
+  const signature = hasOAuth
+    ? [
+        "export async function applyAuth(",
+        "  headers: Record<string, string>,",
+        "  url: URL,",
+        "  security: string[],",
+        "): Promise<void> {",
+      ]
+    : [
+        "export function applyAuth(",
+        "  headers: Record<string, string>,",
+        "  url: URL,",
+        "  security: string[],",
+        "): void {",
+      ];
   return [
     GENERATED_BANNER,
     "",
     "// Injects credentials read from the environment. Secrets are never embedded.",
-    "export function applyAuth(",
-    "  headers: Record<string, string>,",
-    "  url: URL,",
-    "  security: string[],",
-    "): void {",
+    ...(hasOAuth ? oauthHelperTs() : []),
+    ...signature,
     ...(body.length > 0 ? body : ["  // No security schemes detected on the source API."]),
     "}",
     "",
@@ -227,7 +287,7 @@ export function httpClientTs(): string {
     '      body = typeof raw === "string" ? raw : JSON.stringify(raw);',
     "    }",
     "  }",
-    "  applyAuth(headers, url, plan.security);",
+    "  await applyAuth(headers, url, plan.security);",
     "  const response = await fetch(url, { method: plan.method, headers, body });",
     "  const text = await response.text();",
     "  if (!response.ok) {",

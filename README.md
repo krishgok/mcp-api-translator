@@ -116,8 +116,9 @@ client-config.md        # paste-ready Claude / Cursor / Codex config
   `extend_mcp_server` (aggregating multiple APIs into one server).
 - **Output quality tracks spec quality** — missing `operationId`s/descriptions yield weaker tool
   names and docs. Curation helps; it can't invent semantics.
-- **Auth:** API key / bearer / basic / pre-obtained OAuth token, all read from env. **No interactive
-  OAuth flows or token refresh** in v1.
+- **Auth:** API key / bearer / basic / pre-obtained OAuth token, plus the **OAuth2
+  client-credentials grant** (fetches + caches a token), all read from env. **No interactive
+  (authorization-code) OAuth flows** in v1.
 - **Responses** are returned as JSON/text; no upstream streaming or automatic pagination.
 - **Postman** parameter types are inferred from examples (Postman carries no formal schema).
 - **Not a hosted service.** It runs locally/self-hosted: `generate` ownable code, or `serve` a live

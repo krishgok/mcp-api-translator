@@ -28,6 +28,11 @@ export interface SecurityScheme {
   paramName?: string;
   /** For `http` schemes: "bearer" | "basic" | ... */
   scheme?: string;
+  /**
+   * OAuth2 client-credentials token endpoint, when that flow is detected. Its presence switches the
+   * scheme from "pre-obtained token" to fetch-a-token-at-runtime (env vars become client id/secret).
+   */
+  tokenUrl?: string;
   /** Env var(s) the generated server reads the credential from. */
   envVars: string[];
 }

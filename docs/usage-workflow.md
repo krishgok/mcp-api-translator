@@ -229,13 +229,15 @@ API_KEY=sk_live_xxxxxxxx                         # read at runtime; never commit
 
 Env-var naming by scheme:
 
-| Spec auth                                                   | Generated env var(s)           |
-| ----------------------------------------------------------- | ------------------------------ |
-| `apiKey` (header/query/cookie)                              | `API_KEY`                      |
-| `http` bearer / oauth2 / openIdConnect (pre-obtained token) | `API_TOKEN`                    |
-| `http` basic                                                | `API_USERNAME`, `API_PASSWORD` |
+| Spec auth (env var mapping below)                           | Generated env var(s)                 |
+| ----------------------------------------------------------- | ------------------------------------ |
+| `apiKey` (header/query/cookie)                              | `API_KEY`                            |
+| `http` bearer / oauth2 / openIdConnect (pre-obtained token) | `API_TOKEN`                          |
+| `http` basic                                                | `API_USERNAME`, `API_PASSWORD`       |
+| `oauth2` **client-credentials** (spec has a `tokenUrl`)     | `API_CLIENT_ID`, `API_CLIENT_SECRET` |
 
-(Multiple schemes that would collide get namespaced by scheme name.)
+For a client-credentials scheme, the server exchanges the id+secret for a bearer token at the spec's
+`tokenUrl` and caches it. (Multiple schemes that would collide get namespaced by scheme name.)
 
 > **Trust note:** a generated server calls whatever base URL the spec declares and sends your
 > credentials there. If the spec came from an untrusted source, review `config.ts` / `auth.ts` and

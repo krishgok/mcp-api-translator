@@ -8,6 +8,7 @@
  */
 import type { SecurityScheme } from "../ir/model.js";
 import type { RequestPlanData } from "../emitters/templates.js";
+import { getClientCredentialsToken } from "./oauth.js";
 
 export interface RuntimeContext {
   /** Resolved upstream base URL (env override or the spec's first server). */
@@ -35,12 +36,13 @@ function joinUrl(base: string, path: string): string {
 }
 
 /** Inject env-backed credentials for every scheme this operation declares. */
-function applyAuth(
+async function applyAuth(
   headers: Record<string, string>,
   url: URL,
   security: string[],
   ctx: RuntimeContext,
-): void {
+  fetchImpl: FetchLike,
+): Promise<void> {
   // Per-source namespace wins over the bare var, so aggregated APIs don't share one credential.
   const readEnv = (name: string): string | undefined =>
     (ctx.sourceNamespace ? ctx.env[`${ctx.sourceNamespace}_${name}`] : undefined) ?? ctx.env[name];
@@ -64,6 +66,19 @@ function applyAuth(
       const pass = readEnv(p!);
       if (user && pass) {
         headers["authorization"] = "Basic " + Buffer.from(user + ":" + pass).toString("base64");
+      }
+    } else if (scheme.tokenUrl) {
+      // oauth2 client-credentials: envVars = [CLIENT_ID, CLIENT_SECRET] -> fetch a bearer token.
+      const clientId = readEnv(scheme.envVars[0]!);
+      const clientSecret = readEnv(scheme.envVars[1]!);
+      if (clientId && clientSecret) {
+        const token = await getClientCredentialsToken(
+          scheme.tokenUrl,
+          clientId,
+          clientSecret,
+          fetchImpl,
+        );
+        headers["authorization"] = "Bearer " + token;
       }
     } else {
       // http bearer, oauth2, openIdConnect -> pre-obtained token.
@@ -106,7 +121,7 @@ export async function executePlan(
       body = typeof raw === "string" ? raw : JSON.stringify(raw);
     }
   }
-  applyAuth(headers, url, plan.security, ctx);
+  await applyAuth(headers, url, plan.security, ctx, fetchImpl);
   const response = await fetchImpl(url, { method: plan.method, headers, body });
   const text = await response.text();
   if (!response.ok) {

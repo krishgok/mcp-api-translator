@@ -25,6 +25,17 @@ const echo = await parseSource({ specPath: `${fixtures}/echo.postman.json` });
 const ext = await appendToProject(echo, { projectDir: out });
 console.log(`extended python: +${ext.toolsAdded} tools, total ${ext.totalTools}`);
 
+// Also emit an OAuth client-credentials Python project so py_compile covers the token-fetch path.
+const oauthOut = `${out}-oauth`;
+await rm(oauthOut, { recursive: true, force: true });
+const oauth = await parseSource({ specPath: `${fixtures}/oauth.openapi.yaml` });
+await generateProject(oauth, {
+  outputDir: oauthOut,
+  serverName: "e2e-oauth-py",
+  language: "python",
+});
+console.log(`generated oauth python project at ${oauthOut}`);
+
 // Collect every generated .py file and compile it.
 async function pyFiles(dir) {
   const entries = await readdir(dir, { withFileTypes: true });
@@ -37,7 +48,7 @@ async function pyFiles(dir) {
   return files;
 }
 
-const files = await pyFiles(out);
+const files = [...(await pyFiles(out)), ...(await pyFiles(oauthOut))];
 if (files.length === 0) throw new Error("no .py files were generated");
 const res = spawnSync("python3", ["-m", "py_compile", ...files], { stdio: "inherit" });
 if (res.status !== 0) {

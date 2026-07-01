@@ -104,6 +104,16 @@ function authBlockPy(scheme: SecurityScheme): string[] {
     lines.push("        if user and password:");
     lines.push('            token = base64.b64encode((user + ":" + password).encode()).decode()');
     lines.push('            headers["authorization"] = "Basic " + token');
+  } else if (scheme.tokenUrl) {
+    // oauth2 client-credentials: exchange a client id/secret for a bearer token.
+    const [id, secret] = scheme.envVars;
+    lines.push(`        client_id = os.environ.get(${JSON.stringify(id)})`);
+    lines.push(`        client_secret = os.environ.get(${JSON.stringify(secret)})`);
+    lines.push("        if client_id and client_secret:");
+    lines.push(
+      `            token = _get_token(${JSON.stringify(scheme.tokenUrl)}, client_id, client_secret)`,
+    );
+    lines.push('            headers["authorization"] = "Bearer " + token');
   } else {
     // http bearer, oauth2, openIdConnect -> pre-obtained token.
     const env = scheme.envVars[0]!;
@@ -114,14 +124,58 @@ function authBlockPy(scheme: SecurityScheme): string[] {
   return lines;
 }
 
+/** Emitted token fetch + cache, only when a client-credentials scheme is present. */
+function oauthHelperPy(): string[] {
+  return [
+    "_token_cache = {}",
+    "",
+    "",
+    "def _get_token(token_url, client_id, client_secret):",
+    "    key = token_url + '|' + client_id",
+    "    cached = _token_cache.get(key)",
+    "    if cached and cached[1] > time.time():",
+    "        return cached[0]",
+    "    data = urllib.parse.urlencode(",
+    '        {"grant_type": "client_credentials", "client_id": client_id, "client_secret": client_secret}',
+    "    ).encode()",
+    "    req = urllib.request.Request(",
+    "        token_url,",
+    "        data=data,",
+    '        headers={"content-type": "application/x-www-form-urlencoded"},',
+    '        method="POST",',
+    "    )",
+    "    with urllib.request.urlopen(req) as resp:",
+    "        payload = json.loads(resp.read().decode())",
+    '    token = payload.get("access_token")',
+    "    if not token:",
+    '        raise RuntimeError("OAuth token response had no access_token")',
+    '    ttl = payload.get("expires_in", 3600)',
+    "    _token_cache[key] = (token, time.time() + ttl - 30)",
+    "    return token",
+    "",
+  ];
+}
+
 export function authPy(schemes: SecurityScheme[]): string {
   const body = schemes.flatMap(authBlockPy);
+  const hasOAuth = schemes.some((s) => s.tokenUrl);
+  const imports = hasOAuth
+    ? [
+        "import base64",
+        "import json",
+        "import os",
+        "import time",
+        "import urllib.parse",
+        "import urllib.request",
+      ]
+    : ["import base64", "import os"];
   return [
     BANNER,
-    "import base64",
-    "import os",
+    ...imports,
     "",
     "",
+    ...(hasOAuth ? oauthHelperPy() : []),
+    ...(hasOAuth ? [""] : []),
     "def apply_auth(headers, query, security):",
     '    """Inject env-backed credentials. Secrets are never embedded."""',
     ...(body.length > 0
