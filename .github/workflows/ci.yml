@@ -50,3 +50,26 @@ jobs:
           npx tsc
       - name: Generate & compile the Python project(s)
         run: npm run e2e:python
+
+  dco:
+    # Enforce Developer Certificate of Origin sign-off on every PR commit.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify Signed-off-by on every commit
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for sha in $(git rev-list --no-merges "$BASE".."$HEAD"); do
+            if ! git log -1 --format=%B "$sha" | grep -qE '^Signed-off-by: .+ <.+@.+>$'; then
+              echo "::error::Commit $sha is missing a DCO 'Signed-off-by' trailer. Run: git commit --amend -s --no-edit (or git rebase --signoff)"
+              missing=1
+            fi
+          done
+          exit $missing

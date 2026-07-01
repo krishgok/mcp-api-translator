@@ -1,0 +1,25 @@
+node_modules
+dist
+build
+coverage
+*.log
+
+.env
+.env.local
+.env.*.local
+
+.git
+.github
+.vscode
+.idea
+
+test
+docs
+scripts
+
+.DS_Store
+Thumbs.db
+
+# Anything not needed inside the build context
+CONTRIBUTING.md
+SECURITY.md
