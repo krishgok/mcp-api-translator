@@ -23,4 +23,11 @@ const echo = await parseSource({ specPath: `${fixtures}/echo.postman.json` });
 const ext = await appendToProject(echo, { projectDir: out });
 console.log(`appended: +${ext.toolsAdded} tools, total ${ext.totalTools}`);
 
+// Also emit an OAuth client-credentials project so CI compiles the async-auth path.
+const oauthOut = `${out}-oauth`;
+await rm(oauthOut, { recursive: true, force: true });
+const oauth = await parseSource({ specPath: `${fixtures}/oauth.openapi.yaml` });
+await generateProject(oauth, { outputDir: oauthOut, serverName: "e2e-oauth-mcp" });
+console.log(`generated oauth project at ${oauthOut}`);
+
 console.log(`OUTPUT_DIR=${out}`);

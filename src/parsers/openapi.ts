@@ -126,12 +126,20 @@ function securitySchemesFrom(doc: AnyObj) {
       type = "http";
       scheme = "basic";
     }
+    // OAuth2 client-credentials token endpoint (OpenAPI 3.x flows, or Swagger 2.0 tokenUrl).
+    const tokenUrl =
+      typeof d.flows?.clientCredentials?.tokenUrl === "string"
+        ? (d.flows.clientCredentials.tokenUrl as string)
+        : d.flow === "application" && typeof d.tokenUrl === "string"
+          ? (d.tokenUrl as string)
+          : undefined;
     return {
       name,
       type,
       in: d.in,
       paramName: d.name,
       scheme,
+      tokenUrl,
     };
   });
   return assignEnvVars(raw);

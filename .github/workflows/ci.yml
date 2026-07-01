@@ -43,5 +43,10 @@ jobs:
         run: |
           npm install
           npx tsc
-      - name: Generate & compile the Python project
+      - name: Typecheck the generated OAuth (async-auth) project
+        working-directory: build/e2e-out-oauth
+        run: |
+          npm install
+          npx tsc
+      - name: Generate & compile the Python project(s)
         run: npm run e2e:python

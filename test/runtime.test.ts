@@ -5,6 +5,7 @@ import { parseSource } from "../src/parsers/index.js";
 import { executePlan, type FetchLike } from "../src/runtime/client.js";
 import { ApiProxy } from "../src/runtime/server.js";
 import { parseServeArgs } from "../src/runtime/cli.js";
+import { clearTokenCache } from "../src/runtime/oauth.js";
 import type { RequestPlanData } from "../src/emitters/templates.js";
 
 const fixtures = path.dirname(fileURLToPath(import.meta.url)) + "/fixtures";
@@ -239,6 +240,74 @@ describe("per-API auth namespacing", () => {
     expect(res.sourceNamespace).toBe("SWAGGER_PETSTORE");
     expect(res.envVars).toContain("SWAGGER_PETSTORE_API_BASE_URL");
     expect(res.envVars).toContain("SWAGGER_PETSTORE_API_KEY");
+  });
+});
+
+describe("oauth client-credentials", () => {
+  const scheme = {
+    name: "oauthCc",
+    type: "oauth2" as const,
+    tokenUrl: "https://auth.example/token",
+    envVars: ["API_CLIENT_ID", "API_CLIENT_SECRET"],
+  };
+  const plan: RequestPlanData = {
+    method: "GET",
+    pathTemplate: "/w",
+    pathParams: [],
+    queryParams: [],
+    headerParams: [],
+    bodyParam: null,
+    contentType: null,
+    security: ["oauthCc"],
+  };
+
+  /** A fetch stub that answers the token endpoint and records API requests separately. */
+  function oauthIo() {
+    const tokenBodies: (string | undefined)[] = [];
+    const apiCalls: Array<{ url: string; auth?: string }> = [];
+    const fetchImpl: FetchLike = async (url, init) => {
+      if (url.toString().includes("/token")) {
+        tokenBodies.push(init.body);
+        return {
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          text: async () => JSON.stringify({ access_token: "tok-123", expires_in: 3600 }),
+        };
+      }
+      apiCalls.push({ url: url.toString(), auth: init.headers["authorization"] });
+      return { ok: true, status: 200, statusText: "OK", text: async () => "{}" };
+    };
+    return { tokenBodies, apiCalls, fetchImpl };
+  }
+
+  it("fetches a bearer token via client-credentials and caches it", async () => {
+    clearTokenCache();
+    const io = oauthIo();
+    const ctx = {
+      baseUrl: "https://api.example",
+      securitySchemes: [scheme],
+      env: { API_CLIENT_ID: "id", API_CLIENT_SECRET: "secret" },
+    };
+    await executePlan(plan, {}, ctx, io.fetchImpl);
+    await executePlan(plan, {}, ctx, io.fetchImpl);
+    expect(io.apiCalls.map((c) => c.auth)).toEqual(["Bearer tok-123", "Bearer tok-123"]);
+    expect(io.tokenBodies).toHaveLength(1); // second call served from cache
+    expect(io.tokenBodies[0]).toContain("grant_type=client_credentials");
+    expect(io.tokenBodies[0]).toContain("client_id=id");
+  });
+
+  it("skips auth when the client id/secret are unset", async () => {
+    clearTokenCache();
+    const io = oauthIo();
+    await executePlan(
+      plan,
+      {},
+      { baseUrl: "https://api.example", securitySchemes: [scheme], env: {} },
+      io.fetchImpl,
+    );
+    expect(io.apiCalls[0]!.auth).toBeUndefined();
+    expect(io.tokenBodies).toHaveLength(0);
   });
 });
 

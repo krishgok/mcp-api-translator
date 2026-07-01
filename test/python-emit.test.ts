@@ -65,6 +65,21 @@ describe("python generation", () => {
   });
 });
 
+describe("python oauth client-credentials", () => {
+  it("emits a _get_token helper reading the client id/secret", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pygen-"));
+    const model = await parseSource({ specPath: `${fixtures}/oauth.openapi.yaml` });
+    await generateProject(model, { outputDir: dir, serverName: "widgets", language: "python" });
+    const auth = await read(dir, "widgets/auth.py");
+    expect(auth).toContain("def _get_token(");
+    expect(auth).toContain('os.environ.get("API_CLIENT_ID")');
+    expect(auth).toContain("client_credentials");
+    const env = await read(dir, ".env.example");
+    expect(env).toContain("API_CLIENT_ID=");
+    expect(env).toContain("API_CLIENT_SECRET=");
+  });
+});
+
 describe("python extend", () => {
   it("appends another API into tools.json, merges auth, and is idempotent", async () => {
     const pdir = await mkdtemp(path.join(tmpdir(), "pyext-"));
