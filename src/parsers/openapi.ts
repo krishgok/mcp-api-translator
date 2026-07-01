@@ -146,7 +146,12 @@ function securitySchemesFrom(doc: AnyObj) {
 }
 
 export async function parseOpenApi(raw: unknown): Promise<ApiModel> {
-  const doc = (await dereference(raw as never)) as AnyObj;
+  // Resolve internal `$ref`s only. `external: false` disables the http/file resolvers, so a hostile
+  // spec cannot make us fetch a URL or read a local file during parsing (SSRF / info disclosure).
+  const doc = (await dereference(
+    raw as never,
+    { resolve: { external: false } } as never,
+  )) as AnyObj;
   const isV30 = typeof doc.openapi === "string" ? doc.openapi.startsWith("3.0") : !!doc.swagger;
 
   const securitySchemes = securitySchemesFrom(doc);
@@ -178,8 +183,8 @@ export async function parseOpenApi(raw: unknown): Promise<ApiModel> {
         operationId: op.operationId,
         method: method.toUpperCase(),
         path,
-        summary: op.summary,
-        description: op.description,
+        summary: typeof op.summary === "string" ? op.summary : undefined,
+        description: typeof op.description === "string" ? op.description : undefined,
         tags: Array.isArray(op.tags) ? op.tags.map(String) : [],
         parameters,
         requestBody: requestBodyFrom(op, rawParams, isV30),

@@ -65,4 +65,25 @@ describe("Postman parser", () => {
       scheme: "bearer",
     });
   });
+
+  it("coerces a Postman `{ content }` description object to a string", async () => {
+    const spec = {
+      info: {
+        name: "Desc API",
+        schema: "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+      },
+      item: [
+        {
+          name: "Ping",
+          request: {
+            method: "GET",
+            url: { raw: "{{u}}/ping", path: ["ping"] },
+            description: { content: "Ping the server", type: "text/markdown" },
+          },
+        },
+      ],
+    };
+    const model = await parseSource({ spec: JSON.stringify(spec), format: "postman" });
+    expect(model.operations[0]!.description).toBe("Ping the server");
+  });
 });
