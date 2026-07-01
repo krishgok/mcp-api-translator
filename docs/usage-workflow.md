@@ -359,6 +359,11 @@ Point your MCP client at the proxy instead of a generated project:
 The proxy runs the **same request plan and env-based auth** the generator would have emitted, so a
 mounted tool behaves identically to the generated one — it just skips writing code.
 
+**Aggregating multiple APIs?** Each API gets its own env namespace (from its title) so credentials
+and base URLs don't collide. Set `<SOURCE>_API_BASE_URL` / `<SOURCE>_API_KEY` (e.g.
+`SWAGGER_PETSTORE_API_KEY`, `ECHO_API_API_TOKEN`); the bare `API_BASE_URL` / `API_KEY` still work as
+a shared fallback. `serve` prints each API's exact env-var names on startup.
+
 **Generate vs. serve:**
 
 |                                   | `generate_mcp_server`                    | `serve`                                   |

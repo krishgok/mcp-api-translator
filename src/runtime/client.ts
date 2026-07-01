@@ -16,6 +16,11 @@ export interface RuntimeContext {
   securitySchemes: SecurityScheme[];
   /** Environment to read credentials from (injected for testability). */
   env: Record<string, string | undefined>;
+  /**
+   * Per-source env namespace for aggregated servers, e.g. "SWAGGER_PETSTORE". When set, a
+   * credential is read from `<namespace>_<VAR>` first, falling back to the bare `<VAR>`.
+   */
+  sourceNamespace?: string;
 }
 
 /** Minimal fetch surface so tests can inject a stub without a real network. */
@@ -36,10 +41,13 @@ function applyAuth(
   security: string[],
   ctx: RuntimeContext,
 ): void {
+  // Per-source namespace wins over the bare var, so aggregated APIs don't share one credential.
+  const readEnv = (name: string): string | undefined =>
+    (ctx.sourceNamespace ? ctx.env[`${ctx.sourceNamespace}_${name}`] : undefined) ?? ctx.env[name];
   for (const scheme of ctx.securitySchemes) {
     if (!security.includes(scheme.name)) continue;
     if (scheme.type === "apiKey") {
-      const value = ctx.env[scheme.envVars[0]!];
+      const value = readEnv(scheme.envVars[0]!);
       if (!value) continue;
       const param = scheme.paramName ?? "X-API-Key";
       if (scheme.in === "query") {
@@ -52,14 +60,14 @@ function applyAuth(
       }
     } else if (scheme.type === "http" && scheme.scheme?.toLowerCase() === "basic") {
       const [u, p] = scheme.envVars;
-      const user = ctx.env[u!];
-      const pass = ctx.env[p!];
+      const user = readEnv(u!);
+      const pass = readEnv(p!);
       if (user && pass) {
         headers["authorization"] = "Basic " + Buffer.from(user + ":" + pass).toString("base64");
       }
     } else {
       // http bearer, oauth2, openIdConnect -> pre-obtained token.
-      const value = ctx.env[scheme.envVars[0]!];
+      const value = readEnv(scheme.envVars[0]!);
       if (value) headers["authorization"] = "Bearer " + value;
     }
   }

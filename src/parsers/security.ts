@@ -16,6 +16,20 @@ function envPrefix(schemeName: string): string {
   );
 }
 
+/**
+ * Env-var namespace for one source API (from its title), e.g. "Swagger Petstore" -> "SWAGGER_PETSTORE".
+ * Used to disambiguate credentials/base URLs when several APIs are aggregated into one server:
+ * a mounted tool reads `<NAMESPACE>_API_KEY` in preference to the bare `API_KEY`.
+ */
+export function envNamespace(source: string): string {
+  return (
+    source
+      .replace(/[^a-zA-Z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .toUpperCase() || "API"
+  );
+}
+
 interface RawScheme {
   name: string;
   type: SecuritySchemeType;

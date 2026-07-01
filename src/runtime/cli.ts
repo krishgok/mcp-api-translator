@@ -90,6 +90,10 @@ export async function runServe(argv: string[]): Promise<void> {
       `mounted ${result.mounted} tool(s) from "${model.title}" (${specPath})` +
         (result.filteredOut ? `, ${result.filteredOut} filtered out` : ""),
     );
+    if (specs.length > 1) {
+      // When aggregating, each API has its own env namespace so credentials don't collide.
+      console.error(`  env for this API (bare names also work): ${result.envVars.join(", ")}`);
+    }
     for (const w of result.warnings) console.error(`  ! ${w}`);
   }
 

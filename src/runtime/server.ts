@@ -12,6 +12,7 @@ import type { ApiModel, JsonSchema, SecurityScheme } from "../ir/model.js";
 import { curate, TOOL_COUNT_WARN_THRESHOLD } from "../curation/index.js";
 import type { FilterOptions } from "../curation/filter.js";
 import { operationToToolEmit } from "../emitters/project.js";
+import { envNamespace } from "../parsers/security.js";
 import { executePlan, type FetchLike, type RuntimeContext } from "./client.js";
 import type { RequestPlanData } from "../emitters/templates.js";
 import { GENERATOR_NAME, GENERATOR_VERSION } from "../version.js";
@@ -24,6 +25,8 @@ interface MountedTool {
   /** This API's first declared server, used unless API_BASE_URL overrides it. */
   defaultBaseUrl: string;
   securitySchemes: SecurityScheme[];
+  /** Per-source env namespace (from the API title) for base URL + credential resolution. */
+  sourceNamespace: string;
 }
 
 export interface MountResult {
@@ -32,6 +35,10 @@ export interface MountResult {
   filteredOut: number;
   toolNames: string[];
   warnings: string[];
+  /** Env namespace for this source (from its title). */
+  sourceNamespace: string;
+  /** Per-source env vars this API reads (base URL + credentials), each with a bare-name fallback. */
+  envVars: string[];
 }
 
 /** Holds the live tool set across one or more mounted APIs. */
@@ -43,6 +50,7 @@ export class ApiProxy {
     const reserved = new Set(this.tools.keys());
     const { operations, filteredOut } = curate(model, filters, reserved);
     const defaultBaseUrl = model.servers[0] ?? "";
+    const sourceNamespace = envNamespace(model.title);
     const added: string[] = [];
     for (const op of operations) {
       const emit = operationToToolEmit(op, model.title);
@@ -53,6 +61,7 @@ export class ApiProxy {
         plan: emit.plan,
         defaultBaseUrl,
         securitySchemes: model.securitySchemes,
+        sourceNamespace,
       });
       added.push(emit.name);
     }
@@ -62,7 +71,18 @@ export class ApiProxy {
             `This proxy now exposes ${this.tools.size} tools (> ${TOOL_COUNT_WARN_THRESHOLD}). Large tool counts hurt model tool-selection; narrow with includeTags / methods / pathGlob / excludeOperations, or rely on a client that supports dynamic tool discovery (e.g. Tool Search).`,
           ]
         : [];
-    return { mounted: added.length, filteredOut, toolNames: added, warnings };
+    const envVars = [
+      `${sourceNamespace}_API_BASE_URL`,
+      ...model.securitySchemes.flatMap((s) => s.envVars).map((v) => `${sourceNamespace}_${v}`),
+    ];
+    return {
+      mounted: added.length,
+      filteredOut,
+      toolNames: added,
+      warnings,
+      sourceNamespace,
+      envVars,
+    };
   }
 
   /** Tool descriptors for an MCP `tools/list` response. */
@@ -87,8 +107,15 @@ export class ApiProxy {
   ): Promise<string> {
     const tool = this.tools.get(name);
     if (!tool) throw new Error(`Unknown tool: ${name}`);
-    const baseUrl = env.API_BASE_URL ?? tool.defaultBaseUrl;
-    const ctx: RuntimeContext = { baseUrl, securitySchemes: tool.securitySchemes, env };
+    // Base URL: per-source override wins, then the global override, then the spec's own server.
+    const baseUrl =
+      env[`${tool.sourceNamespace}_API_BASE_URL`] ?? env.API_BASE_URL ?? tool.defaultBaseUrl;
+    const ctx: RuntimeContext = {
+      baseUrl,
+      securitySchemes: tool.securitySchemes,
+      env,
+      sourceNamespace: tool.sourceNamespace,
+    };
     return executePlan(tool.plan, args, ctx, fetchImpl);
   }
 }
