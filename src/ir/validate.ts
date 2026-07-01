@@ -73,6 +73,14 @@ export function validateApiModel(model: ApiModel): string[] {
       if (typeof op?.path !== "string" || !op.path.startsWith("/")) {
         issues.push(`${at}.path "${op?.path}" must be a string starting with "/"`);
       }
+      // Emitters call .trim() on these, so a non-string (e.g. an object description) must fail here
+      // with a clear message rather than as a TypeError during code generation.
+      if (op?.summary !== undefined && typeof op.summary !== "string") {
+        issues.push(`${at}.summary must be a string when present`);
+      }
+      if (op?.description !== undefined && typeof op.description !== "string") {
+        issues.push(`${at}.description must be a string when present`);
+      }
       if (!Array.isArray(op?.parameters)) {
         issues.push(`${at}.parameters must be an array`);
       } else {

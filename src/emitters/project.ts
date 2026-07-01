@@ -12,6 +12,7 @@ import { buildDescription } from "../curation/describe.js";
 import { curate, TOOL_COUNT_WARN_THRESHOLD } from "../curation/index.js";
 import { applyFilters, type FilterOptions } from "../curation/filter.js";
 import { uniqueToolName } from "../curation/naming.js";
+import { assignEnvVars } from "../parsers/security.js";
 import {
   operationKey,
   readManifest,
@@ -162,6 +163,7 @@ export function operationToToolEmit(op: Operation, sourceTitle: string): t.ToolE
       pathParams: pathTokens,
       queryParams: op.parameters.filter((p) => p.in === "query").map((p) => p.name),
       headerParams: op.parameters.filter((p) => p.in === "header").map((p) => p.name),
+      cookieParams: op.parameters.filter((p) => p.in === "cookie").map((p) => p.name),
       bodyParam,
       contentType: op.requestBody?.contentType ?? null,
       security: op.security,
@@ -377,7 +379,10 @@ export async function appendToProject(
   const schemeMap = new Map<string, SecurityScheme>();
   for (const s of manifest.securitySchemes) schemeMap.set(s.name, s);
   for (const s of model.securitySchemes) if (!schemeMap.has(s.name)) schemeMap.set(s.name, s);
-  const schemes = [...schemeMap.values()];
+  // Re-derive env vars across the *merged* set: per-spec assignment can't see that two APIs both
+  // want API_TOKEN, so without this an appended API would silently share the first API's env var.
+  // Manifest schemes are first in insertion order, so the original API keeps its existing env vars.
+  const schemes = assignEnvVars([...schemeMap.values()]);
 
   // Add only operations not already present (idempotency by method+path).
   const existingKeys = new Set(manifest.tools.map((tool) => operationKey(tool.method, tool.path)));

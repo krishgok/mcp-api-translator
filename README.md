@@ -1,5 +1,10 @@
 # mcp-api-translator
 
+[![npm](https://img.shields.io/npm/v/mcp-api-translator.svg)](https://www.npmjs.com/package/mcp-api-translator)
+[![CI](https://github.com/krishgok/mcp-api-translator/actions/workflows/ci.yml/badge.svg)](https://github.com/krishgok/mcp-api-translator/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![MCP](https://img.shields.io/badge/MCP-server-blue.svg)](https://modelcontextprotocol.io)
+
 An **MCP server that generates MCP servers**. Give it an API definition (OpenAPI 3.0/3.1 or a
 Postman collection) and it scaffolds a complete, runnable, _ownable_ TypeScript MCP server for that
 API — so a service with no "MCP strategy" becomes usable and discoverable by AI models (Claude,
@@ -7,6 +12,108 @@ Cursor, Codex, …).
 
 It is itself an MCP server: an agent connects to it and calls its tools to analyze a spec, generate
 a server, or extend an existing one.
+
+## Add to your AI stack
+
+No install step. `npx` fetches and runs the latest published version — cross-platform, Node 20+.
+
+### Claude Desktop / Claude Code
+
+Add to `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/`, Windows:
+`%APPDATA%\Claude\`) or your `mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "api-translator": {
+      "command": "npx",
+      "args": ["-y", "mcp-api-translator"]
+    }
+  }
+}
+```
+
+<details>
+<summary><strong>Cursor</strong></summary>
+
+Add to `~/.cursor/mcp.json` (or the project-scoped `.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "api-translator": {
+      "command": "npx",
+      "args": ["-y", "mcp-api-translator"]
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><strong>Cline (VS Code)</strong></summary>
+
+Open the Cline sidebar → MCP Servers → Configure → add:
+
+```json
+{
+  "mcpServers": {
+    "api-translator": {
+      "command": "npx",
+      "args": ["-y", "mcp-api-translator"],
+      "disabled": false
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><strong>Continue.dev</strong></summary>
+
+Add to `~/.continue/config.json` under `experimental.modelContextProtocolServers`:
+
+```json
+{
+  "experimental": {
+    "modelContextProtocolServers": [
+      {
+        "transport": {
+          "type": "stdio",
+          "command": "npx",
+          "args": ["-y", "mcp-api-translator"]
+        }
+      }
+    ]
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><strong>Docker (no Node required)</strong></summary>
+
+```json
+{
+  "mcpServers": {
+    "api-translator": {
+      "command": "docker",
+      "args": ["run", "--rm", "-i", "ghcr.io/krishgok/mcp-api-translator:latest"]
+    }
+  }
+}
+```
+
+To let the generator read specs from disk or write generated projects to a host path, mount the
+directory: `-v ${PWD}:/workspace` and pass `/workspace/...` as `specPath` / `outputDir`.
+
+</details>
+
+Restart your client. Then try: _"analyze ./petstore.yaml, then generate an MCP server for just the
+`pets` tag into ./petstore-mcp"_.
 
 ## Why this exists (and an honest take on the space)
 
@@ -69,29 +176,6 @@ All spec inputs accept inline text (`spec`) or a local path (`specPath`), JSON o
   [docs/serve-api-proposal.md](docs/serve-api-proposal.md) for the design and
   [docs/market-analysis.md](docs/market-analysis.md) for why both models exist.
 
-## Quickstart
-
-```bash
-npm install
-npm run build
-```
-
-Add it to an MCP client (e.g. Claude Desktop / Claude Code `mcp.json`):
-
-```json
-{
-  "mcpServers": {
-    "api-translator": {
-      "command": "node",
-      "args": ["/absolute/path/to/mcp-api-translator/dist/index.js"]
-    }
-  }
-}
-```
-
-Then ask your agent to, e.g., _"analyze ./petstore.yaml, then generate an MCP server for just the
-`pets` tag into ./petstore-mcp"_.
-
 For the full end-to-end journey (analyze → curate → generate → run → aggregate → publish), see
 [docs/usage-workflow.md](docs/usage-workflow.md).
 
@@ -138,14 +222,26 @@ output before pointing it at credentials:
 - **Secrets are never embedded** in the generated project — `auth.ts` reads them from the environment
   at runtime and `.env.example` ships with empty values.
 
+To report a vulnerability, see [SECURITY.md](SECURITY.md).
+
 ## Development
 
 ```bash
+npm install
 npm test          # unit + integration (parsers, curation, emit, append)
 npm run typecheck
+npm run build
 npm run e2e       # generate a sample project from the fixtures into build/e2e-out
 ```
 
-## License
+Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). All commits must be signed off
+under the [Developer Certificate of Origin](https://developercertificate.org/) (`git commit -s`).
 
-MIT
+## License & Attribution
+
+Licensed under the [MIT License](LICENSE), © 2026 krishgok.
+
+Redistributions in source or binary form must retain both [`LICENSE`](LICENSE) and
+[`NOTICE`](NOTICE). The MIT License grants broad rights to use, modify, and distribute the
+software; it does **not** grant the right to use the "mcp-api-translator" name to endorse or
+promote forked or derivative works without prior written permission.

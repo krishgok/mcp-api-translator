@@ -155,6 +155,104 @@ describe("hardening", () => {
     expect(brokeOut).toEqual([]);
   });
 
+  it("gives each token-auth API its own env var when aggregating (no shared token)", async () => {
+    // Two different APIs that both use bearer auth, under differently-named schemes. Per-spec env
+    // assignment can't see the collision; the append path must re-derive across the merged set.
+    const bearerSpec = (title: string, scheme: string, opId: string, opPath: string) => ({
+      openapi: "3.0.0",
+      info: { title, version: "1.0.0" },
+      servers: [{ url: "https://api.example.com" }],
+      paths: {
+        [opPath]: {
+          get: {
+            operationId: opId,
+            security: [{ [scheme]: [] }],
+            responses: { "200": { description: "ok" } },
+          },
+        },
+      },
+      components: { securitySchemes: { [scheme]: { type: "http", scheme: "bearer" } } },
+    });
+
+    const dir = await mkdtemp(path.join(tmpdir(), "mcpgen-"));
+    const a = await parseSource({
+      spec: JSON.stringify(bearerSpec("A", "tokenAuth", "getA", "/a")),
+      format: "openapi",
+    });
+    await generateProject(a, { outputDir: dir });
+    const b = await parseSource({
+      spec: JSON.stringify(bearerSpec("B", "sessionAuth", "getB", "/b")),
+      format: "openapi",
+    });
+    await appendToProject(b, { projectDir: dir });
+
+    const manifest = await readManifest(dir);
+    const envVars = manifest!.securitySchemes.flatMap((s) => s.envVars);
+    // Two schemes, two *distinct* env vars — not both "API_TOKEN".
+    expect(envVars.length).toBe(2);
+    expect(new Set(envVars).size).toBe(2);
+    expect(envVars).toContain("API_TOKEN");
+
+    const envExample = await read(dir, ".env.example");
+    for (const v of envVars) expect(envExample).toContain(`${v}=`);
+  });
+
+  it("sends declared cookie parameters instead of silently dropping them", async () => {
+    const spec = {
+      openapi: "3.0.0",
+      info: { title: "Cookie API", version: "1.0.0" },
+      servers: [{ url: "https://api.example.com" }],
+      paths: {
+        "/session": {
+          get: {
+            operationId: "getSession",
+            parameters: [
+              { name: "sid", in: "cookie", required: false, schema: { type: "string" } },
+            ],
+            responses: { "200": { description: "ok" } },
+          },
+        },
+      },
+    };
+    const dir = await mkdtemp(path.join(tmpdir(), "mcpgen-"));
+    const model = await parseSource({ spec: JSON.stringify(spec), format: "openapi" });
+    await generateProject(model, { outputDir: dir });
+
+    const tool = await read(dir, "src/tools/getSession.ts");
+    expect(tool).toContain('"cookieParams": [\n    "sid"\n  ]');
+    const client = await read(dir, "src/http/client.ts");
+    expect(client).toContain("plan.cookieParams");
+    expect(client).toContain('headers["cookie"]');
+  });
+
+  it("serializes array query values as repeated params", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "mcpgen-"));
+    const model = await parseSource({ specPath: `${fixtures}/petstore.openapi.yaml` });
+    await generateProject(model, { outputDir: dir, force: true });
+    const client = await read(dir, "src/http/client.ts");
+    expect(client).toContain("Array.isArray(value)");
+    expect(client).toContain("url.searchParams.append(name, String(v))");
+  });
+
+  it("emits DNS-rebinding protection on the HTTP transport", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "mcpgen-"));
+    const model = await parseSource({ specPath: `${fixtures}/petstore.openapi.yaml` });
+    await generateProject(model, { outputDir: dir, transport: "both" });
+    const httpIndex = await read(dir, "src/index.http.ts");
+    expect(httpIndex).toContain("enableDnsRebindingProtection: true");
+    expect(httpIndex).toContain("allowedHosts");
+  });
+
+  it("emits a hardened, non-root Dockerfile", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "mcpgen-"));
+    const model = await parseSource({ specPath: `${fixtures}/petstore.openapi.yaml` });
+    await generateProject(model, { outputDir: dir });
+    const dockerfile = await read(dir, "Dockerfile");
+    expect(dockerfile).toContain("AS build");
+    expect(dockerfile).toContain("npm install --omit=dev");
+    expect(dockerfile).toContain("USER node");
+  });
+
   it("treats an undeclared {token} in the path as a required string input", async () => {
     const spec = {
       openapi: "3.0.0",

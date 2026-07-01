@@ -21,6 +21,18 @@ type AnyObj = Record<string, any>;
 
 const SKIP_HEADERS = new Set(["content-type", "accept", "authorization"]);
 
+/**
+ * Postman `description` fields may be a plain string or a `{ content, type }` object. Coerce both
+ * to a string (or undefined) so downstream emitters never receive a non-string description.
+ */
+function asDescription(value: unknown): string | undefined {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object" && typeof (value as AnyObj).content === "string") {
+    return (value as AnyObj).content;
+  }
+  return undefined;
+}
+
 /** Infer a JSON Schema from a concrete example value. */
 function inferSchema(value: unknown): JsonSchema {
   if (value === null) return {};
@@ -168,7 +180,7 @@ export function parsePostman(raw: unknown): ApiModel {
         method,
         path,
         summary: typeof item.name === "string" ? item.name : undefined,
-        description: typeof req.description === "string" ? req.description : item.description,
+        description: asDescription(req.description) ?? asDescription(item.description),
         tags,
         parameters,
         requestBody,

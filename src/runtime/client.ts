@@ -103,12 +103,31 @@ export async function executePlan(
   const url = new URL(joinUrl(ctx.baseUrl, path));
   for (const name of plan.queryParams) {
     const value = args[name];
-    if (value !== undefined && value !== null) url.searchParams.set(name, String(value));
+    if (value === undefined || value === null) continue;
+    // Array query values are repeated (?k=1&k=2), the OpenAPI default (form/explode).
+    if (Array.isArray(value)) {
+      for (const v of value) {
+        if (v !== undefined && v !== null) url.searchParams.append(name, String(v));
+      }
+    } else {
+      url.searchParams.set(name, String(value));
+    }
   }
   const headers: Record<string, string> = {};
   for (const name of plan.headerParams) {
     const value = args[name];
-    if (value !== undefined && value !== null) headers[name] = String(value);
+    if (value === undefined || value === null) continue;
+    headers[name] = Array.isArray(value) ? value.map(String).join(",") : String(value);
+  }
+  const cookies: string[] = [];
+  for (const name of plan.cookieParams) {
+    const value = args[name];
+    if (value !== undefined && value !== null) {
+      cookies.push(name + "=" + encodeURIComponent(String(value)));
+    }
+  }
+  if (cookies.length > 0) {
+    headers["cookie"] = (headers["cookie"] ? headers["cookie"] + "; " : "") + cookies.join("; ");
   }
   let body: string | undefined;
   if (plan.bodyParam && args[plan.bodyParam] !== undefined) {

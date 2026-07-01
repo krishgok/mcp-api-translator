@@ -3,14 +3,44 @@
   "version": "0.1.0",
   "description": "An MCP server that turns OpenAPI / Postman API definitions into runnable MCP servers, making any API discoverable to AI models.",
   "license": "MIT",
+  "author": "krishgok",
   "type": "module",
   "bin": {
     "mcp-api-translator": "dist/index.js"
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE",
+    "NOTICE"
   ],
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "modelcontextprotocol",
+    "openapi",
+    "swagger",
+    "postman",
+    "api",
+    "codegen",
+    "claude",
+    "cursor",
+    "cline",
+    "ai-tools",
+    "llm-tools"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/krishgok/mcp-api-translator.git"
+  },
+  "homepage": "https://github.com/krishgok/mcp-api-translator#readme",
+  "bugs": {
+    "url": "https://github.com/krishgok/mcp-api-translator/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "engines": {
     "node": ">=20"
   },

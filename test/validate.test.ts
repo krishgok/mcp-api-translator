@@ -55,6 +55,14 @@ describe("validateApiModel", () => {
     expect(issues.some((i) => i.includes(".schema"))).toBe(true);
   });
 
+  it("rejects a non-string description (would crash the emitter)", () => {
+    const m = baseModel();
+    // @ts-expect-error intentionally invalid
+    m.operations[0]!.description = { content: "oops" };
+    const issues = validateApiModel(m);
+    expect(issues.some((i) => i.includes("description"))).toBe(true);
+  });
+
   it("rejects a security scheme with no env vars", () => {
     const m = baseModel();
     m.securitySchemes[0]!.envVars = [];
