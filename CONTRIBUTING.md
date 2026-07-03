@@ -72,6 +72,10 @@ npm run build
 npm publish --access public --no-provenance
 ```
 
+If npm still rejects the publish with a provenance error (`publishConfig.provenance` in
+`package.json` can take precedence over the CLI flag), temporarily set that field to `false` for
+the bootstrap publish and restore it before committing.
+
 Then, on npmjs.com, open the package → **Settings → Trusted Publisher** and add:
 
 - **Organization or user:** `krishgok`

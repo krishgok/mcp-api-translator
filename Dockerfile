@@ -23,7 +23,7 @@ WORKDIR /app
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/package.json ./
-COPY LICENSE NOTICE ./
+COPY LICENSE NOTICE LICENSING.md ./
 
 # Distroless nodejs images set ENTRYPOINT=["/nodejs/bin/node"]; CMD supplies the script.
 CMD ["dist/index.js"]
