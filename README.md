@@ -2,7 +2,8 @@
 
 [![npm](https://img.shields.io/npm/v/mcp-api-translator.svg)](https://www.npmjs.com/package/mcp-api-translator)
 [![CI](https://github.com/krishgok/mcp-api-translator/actions/workflows/ci.yml/badge.svg)](https://github.com/krishgok/mcp-api-translator/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
+[![Commercial license available](https://img.shields.io/badge/License-Commercial-green.svg)](LICENSING.md)
 [![MCP](https://img.shields.io/badge/MCP-server-blue.svg)](https://modelcontextprotocol.io)
 
 An **MCP server that generates MCP servers**. Give it an API definition (OpenAPI 3.0/3.1 or a
@@ -239,9 +240,18 @@ under the [Developer Certificate of Origin](https://developercertificate.org/) (
 
 ## License & Attribution
 
-Licensed under the [MIT License](LICENSE), © 2026 krishgok.
+`mcp-api-translator` is **dual-licensed** — © 2026 krishgok. See [LICENSING.md](LICENSING.md) for
+the full details.
 
-Redistributions in source or binary form must retain both [`LICENSE`](LICENSE) and
-[`NOTICE`](NOTICE). The MIT License grants broad rights to use, modify, and distribute the
-software; it does **not** grant the right to use the "mcp-api-translator" name to endorse or
-promote forked or derivative works without prior written permission.
+- **Open source:** [GNU AGPL-3.0-or-later](LICENSE). If you run a modified version to provide a
+  network service, the AGPL requires you to offer that version's complete source to its users.
+- **Commercial:** a separate commercial license is available for embedding `mcp-api-translator` in
+  proprietary or closed-source products/services without AGPL obligations —
+  see [LICENSING.md](LICENSING.md).
+- **Your generated output is yours.** Projects produced by running this tool are covered by a
+  [generated-output exception](LICENSING.md#3-generated-output-exception) and are **not** subject to
+  the AGPL — license them however you like.
+
+Redistributions must retain [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE). The licenses do **not**
+grant the right to use the "mcp-api-translator" name to endorse or promote forked or derivative
+works without prior written permission.
