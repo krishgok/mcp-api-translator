@@ -113,8 +113,8 @@ directory: `-v ${PWD}:/workspace` and pass `/workspace/...` as `specPath` / `out
 
 </details>
 
-Restart your client. Then try: _"analyze ./petstore.yaml, then generate an MCP server for just the
-`pets` tag into ./petstore-mcp"_.
+MCP config is read at startup, so quit and reopen your client (Claude Desktop, Cursor, …) to pick
+up the new server — its four tools should then appear. Then see [Usage](#usage).
 
 ## Why this exists (and an honest take on the space)
 
@@ -160,6 +160,59 @@ FastMCP's runtime mode may suit you better — that's a deliberate non-goal here
 
 All spec inputs accept inline text (`spec`) or a local path (`specPath`), JSON or YAML.
 
+## Usage
+
+You don't call the tools by hand — you ask your agent, and it drives them. A typical session:
+
+**1. Preview** — see what a spec would become, without writing files:
+
+> _"Analyze ./petstore.yaml and show me the proposed tools."_
+
+```js
+analyze_spec({ specPath: "./petstore.yaml" })
+// → proposed tool list, auth scheme, and the env vars the server will need
+```
+
+**2. Curate** — big API? Narrow it. Every tool accepts the same filters:
+
+> _"Only the GET endpoints under /pets."_
+
+```js
+analyze_spec({ specPath: "./petstore.yaml", methods: ["GET"], pathGlob: "/pets/**" })
+// also: includeTags: ["pets"], excludeOperations: ["deletePet"]
+```
+
+**3. Generate** — same filters, plus an output directory:
+
+> _"Generate the server into ./petstore-mcp."_
+
+```js
+generate_mcp_server({ specPath: "./petstore.yaml", outputDir: "./petstore-mcp" })
+// options: language: "python", transport: "http", force: true
+```
+
+**4. Run it** — the output is a normal project:
+
+```bash
+cd petstore-mcp && npm install && npm run build
+cp .env.example .env   # set API_BASE_URL + credentials (never embedded in code)
+```
+
+Register it with your client (paste-ready snippet in the generated `client-config.md`) and your
+agent can call the API: `listPets`, `getPetById`, …
+
+**5. Aggregate** (optional) — add more APIs to the same server:
+
+> _"Extend ./petstore-mcp with ./github.yaml, just the issues tag."_
+
+```js
+extend_mcp_server({ projectDir: "./petstore-mcp", specPath: "./github.yaml", includeTags: ["issues"] })
+// idempotent; hand-edited tool files are preserved
+```
+
+Full walkthrough with sample outputs and troubleshooting:
+[docs/usage-workflow.md](docs/usage-workflow.md).
+
 ## Two ways to use a spec: generate, or serve
 
 - **Generate** ownable code (`generate_mcp_server`) when you want a project you can hand-edit,
@@ -176,9 +229,6 @@ All spec inputs accept inline text (`spec`) or a local path (`specPath`), JSON o
   generated output exactly — it just skips the codegen step. See
   [docs/serve-api-proposal.md](docs/serve-api-proposal.md) for the design and
   [docs/market-analysis.md](docs/market-analysis.md) for why both models exist.
-
-For the full end-to-end journey (analyze → curate → generate → run → aggregate → publish), see
-[docs/usage-workflow.md](docs/usage-workflow.md).
 
 ## Generated project layout
 
