@@ -28,8 +28,10 @@ If you **cannot or do not want to comply with the AGPL** — for example, you wa
 
 then a separate **commercial license** is available that removes the AGPL's copyleft obligations.
 
-**Contact for commercial licensing:** `licensing@` your domain (replace with a real address, e.g.
-open a GitHub issue titled "Commercial license inquiry" or email the maintainer).
+**To request a commercial license,** open a
+[Commercial License Inquiry](https://github.com/krishgok/mcp-api-translator/issues/new?template=commercial-license-inquiry.yml)
+issue. It only starts the conversation — you can ask to continue over private email, and no binding
+terms exist until a written agreement is signed.
 
 ## 3. Generated-output exception
 

@@ -1,0 +1,57 @@
+name: Commercial License Inquiry
+description: Request commercial licensing terms to use mcp-api-translator without AGPL-3.0 obligations.
+title: "[Commercial License] "
+labels: ["commercial-license"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for your interest in a commercial license for **mcp-api-translator**.
+
+        This project is dual-licensed (AGPL-3.0 + commercial) — see
+        [LICENSING.md](../blob/HEAD/LICENSING.md). A commercial license lets you embed or host the
+        tool in a proprietary/closed-source product without the AGPL's copyleft obligations.
+
+        > Note: issues in a public repository are visible to everyone. Share only what you're
+        > comfortable posting publicly — you can ask below to move the rest of the conversation to
+        > private email.
+  - type: input
+    id: organization
+    attributes:
+      label: Company / organization
+      placeholder: Acme, Inc.
+    validations:
+      required: true
+  - type: input
+    id: contact
+    attributes:
+      label: Contact (email or preferred channel)
+      description: How should we reach you? You may say "private email — will share on request."
+    validations:
+      required: true
+  - type: dropdown
+    id: use-case
+    attributes:
+      label: Intended use
+      options:
+        - Embed in a proprietary / closed-source product
+        - Offer as part of a hosted / SaaS product
+        - Redistribute in a closed-source distribution
+        - Need warranty / indemnity / support terms
+        - Other (describe below)
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: Briefly describe how you plan to use mcp-api-translator, expected scale, and any timeline.
+    validations:
+      required: false
+  - type: checkboxes
+    id: acknowledgements
+    attributes:
+      label: Acknowledgement
+      options:
+        - label: I understand this issue only starts a conversation and creates no binding terms.
+          required: true
