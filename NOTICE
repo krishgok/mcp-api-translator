@@ -1,12 +1,19 @@
 mcp-api-translator
 Copyright (c) 2026 krishgok
 
-Licensed under the MIT License. See LICENSE for the full text.
+This program is dual-licensed:
 
-Redistributions in source or binary form must retain this NOTICE file
-alongside the LICENSE file.
+  1. Under the GNU Affero General Public License v3.0 (or later) — see LICENSE.
+  2. Under a separate commercial license — see LICENSING.md.
 
-"mcp-api-translator" is the project name used by the original author.
-The MIT License grants rights to use, copy, modify, and distribute the
-software; it does not grant rights to use the project name to endorse
-or promote derivative works without prior written permission.
+You may use this software under the terms of either license. See LICENSING.md
+for details, including the generated-output exception (code emitted by running
+this tool is not subject to the AGPL).
+
+Redistributions in source or binary form must retain this NOTICE file alongside
+the LICENSE file.
+
+"mcp-api-translator" is the project name used by the original author. The
+licenses grant rights to use, modify, and distribute the software; they do not
+grant rights to use the project name to endorse or promote derivative works
+without prior written permission.
