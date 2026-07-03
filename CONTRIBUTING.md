@@ -67,7 +67,9 @@ first version must be published manually by a maintainer signed in to npm
 
 ```bash
 npm run build
-npm publish --access public
+# --no-provenance: provenance requires the OIDC CI environment, so a local bootstrap
+# publish can't generate it. CI releases (below) attach provenance automatically.
+npm publish --access public --no-provenance
 ```
 
 Then, on npmjs.com, open the package → **Settings → Trusted Publisher** and add:
