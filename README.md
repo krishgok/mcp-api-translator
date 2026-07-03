@@ -169,7 +169,7 @@ You don't call the tools by hand — you ask your agent, and it drives them. A t
 > _"Analyze ./petstore.yaml and show me the proposed tools."_
 
 ```js
-analyze_spec({ specPath: "./petstore.yaml" })
+analyze_spec({ specPath: "./petstore.yaml" });
 // → proposed tool list, auth scheme, and the env vars the server will need
 ```
 
@@ -178,7 +178,7 @@ analyze_spec({ specPath: "./petstore.yaml" })
 > _"Only the GET endpoints under /pets."_
 
 ```js
-analyze_spec({ specPath: "./petstore.yaml", methods: ["GET"], pathGlob: "/pets/**" })
+analyze_spec({ specPath: "./petstore.yaml", methods: ["GET"], pathGlob: "/pets/**" });
 // also: includeTags: ["pets"], excludeOperations: ["deletePet"]
 ```
 
@@ -187,7 +187,7 @@ analyze_spec({ specPath: "./petstore.yaml", methods: ["GET"], pathGlob: "/pets/*
 > _"Generate the server into ./petstore-mcp."_
 
 ```js
-generate_mcp_server({ specPath: "./petstore.yaml", outputDir: "./petstore-mcp" })
+generate_mcp_server({ specPath: "./petstore.yaml", outputDir: "./petstore-mcp" });
 // options: language: "python", transport: "http", force: true
 ```
 
@@ -206,7 +206,11 @@ agent can call the API: `listPets`, `getPetById`, …
 > _"Extend ./petstore-mcp with ./github.yaml, just the issues tag."_
 
 ```js
-extend_mcp_server({ projectDir: "./petstore-mcp", specPath: "./github.yaml", includeTags: ["issues"] })
+extend_mcp_server({
+  projectDir: "./petstore-mcp",
+  specPath: "./github.yaml",
+  includeTags: ["issues"],
+});
 // idempotent; hand-edited tool files are preserved
 ```
 
