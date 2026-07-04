@@ -144,6 +144,13 @@ export function registerTools(server: McpServer): void {
           .enum(["typescript", "python"])
           .optional()
           .describe("Output language. Defaults to typescript."),
+        pythonVariant: z
+          .enum(["lowlevel", "fastmcp"])
+          .optional()
+          .describe(
+            "Python server flavor (requires language: python): the low-level MCP SDK (default) " +
+              "or FastMCP. Both serve the same raw JSON-Schema tool inputs.",
+          ),
         transport: z
           .enum(["stdio", "http", "both"])
           .optional()
@@ -165,6 +172,7 @@ export function registerTools(server: McpServer): void {
         serverName: args.serverName as string | undefined,
         serverVersion: args.serverVersion as string | undefined,
         language: args.language as "typescript" | "python" | undefined,
+        pythonVariant: args.pythonVariant as "lowlevel" | "fastmcp" | undefined,
         transport: args.transport as "stdio" | "http" | "both" | undefined,
         toolCatalog: args.toolCatalog as boolean | undefined,
         force: args.force as boolean | undefined,
@@ -219,7 +227,10 @@ export function registerTools(server: McpServer): void {
     async (): Promise<CallToolResult> => {
       const features = {
         inputFormats: SUPPORTED_FORMATS,
-        outputLanguages: ["typescript", "python"],
+        outputLanguages: [
+          "typescript",
+          "python (lowlevel MCP SDK by default, or pythonVariant: fastmcp)",
+        ],
         modes: {
           generate: "Scaffold an ownable TypeScript MCP-server project (generate_mcp_server).",
           serve:

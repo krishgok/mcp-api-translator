@@ -51,6 +51,12 @@ export interface ManifestSource {
 /** Output language of a generated project. */
 export type Language = "typescript" | "python";
 
+/**
+ * Python server flavor: the low-level MCP SDK (default) or FastMCP. Both register tools with the
+ * raw JSON-Schema inputs verbatim — the FastMCP variant never uses type-hint schema derivation.
+ */
+export type PythonVariant = "lowlevel" | "fastmcp";
+
 export interface TranslatorManifest {
   /** Schema version of this manifest file; see {@link MANIFEST_VERSION}. */
   manifestVersion: number;
@@ -58,6 +64,8 @@ export interface TranslatorManifest {
   generatorVersion: string;
   /** Output language; absent on legacy (pre-Python) manifests, treated as "typescript". */
   language?: Language;
+  /** Python server flavor; absent means "lowlevel". Only meaningful when language is "python". */
+  pythonVariant?: PythonVariant;
   serverName: string;
   serverVersion: string;
   description?: string;

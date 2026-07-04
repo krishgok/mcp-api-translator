@@ -142,6 +142,57 @@ describe("python extend", () => {
   });
 });
 
+describe("python fastmcp variant", () => {
+  it("emits a FastMCP server with explicit raw-schema tool registration", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pyfm-"));
+    const model = await parseSource({ specPath: `${fixtures}/petstore.openapi.yaml` });
+    await generateProject(model, {
+      outputDir: dir,
+      serverName: "fm-py",
+      language: "python",
+      pythonVariant: "fastmcp",
+    });
+
+    const server = await read(dir, "fm_py/server.py");
+    expect(server).toContain("from fastmcp import FastMCP");
+    // Raw JSON-Schema inputs are registered verbatim — never type-hint derivation.
+    expect(server).toContain('parameters=_tool["inputSchema"]');
+    expect(server).not.toContain("mcp.server.lowlevel");
+
+    const pyproject = await read(dir, "pyproject.toml");
+    expect(pyproject).toContain('"fastmcp>=2,<3"');
+    expect(pyproject).not.toContain('"mcp>=');
+
+    const manifest = await readManifest(dir);
+    expect(manifest?.pythonVariant).toBe("fastmcp");
+  });
+
+  it("keeps the fastmcp flavor across extends", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pyfm-"));
+    const petstore = await parseSource({ specPath: `${fixtures}/petstore.openapi.yaml` });
+    await generateProject(petstore, {
+      outputDir: dir,
+      serverName: "fm-agg",
+      language: "python",
+      pythonVariant: "fastmcp",
+    });
+    const echo = await parseSource({ specPath: `${fixtures}/echo.postman.json` });
+    const ext = await appendToProject(echo, { projectDir: dir });
+    expect(ext.toolsAdded).toBe(3);
+    const server = await read(dir, "fm_agg/server.py");
+    expect(server).toContain("from fastmcp import FastMCP");
+    expect((await readManifest(dir))?.pythonVariant).toBe("fastmcp");
+  });
+
+  it("rejects pythonVariant without language: python", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pyfm-"));
+    const model = await parseSource({ specPath: `${fixtures}/petstore.openapi.yaml` });
+    await expect(
+      generateProject(model, { outputDir: dir, pythonVariant: "fastmcp" }),
+    ).rejects.toThrow(/requires language/);
+  });
+});
+
 describe("python per-API env namespacing", () => {
   it("records sourceNamespace per tool and resolves namespaced env vars", async () => {
     const pdir = await mkdtemp(path.join(tmpdir(), "pyns-"));

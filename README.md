@@ -257,7 +257,9 @@ tool-catalog.json       # optional (toolCatalog: true): name/summary/tags per to
 
 - **Inputs:** OpenAPI 3.0/3.1 and Postman v2.1 (Swagger 2.0 best-effort). No GraphQL/gRPC yet.
 - **Output languages:** TypeScript (default) and Python. Both support `generate` and
-  `extend_mcp_server` (aggregating multiple APIs into one server).
+  `extend_mcp_server` (aggregating multiple APIs into one server). Python can be flavored
+  with `pythonVariant: "fastmcp"` (FastMCP 2.x instead of the low-level SDK); both flavors
+  serve the same raw JSON-Schema tool inputs.
 - **Output quality tracks spec quality** — missing `operationId`s/descriptions yield weaker tool
   names and docs. Curation helps; it can't invent semantics.
 - **Auth:** API key / bearer / basic / pre-obtained OAuth token, plus the **OAuth2

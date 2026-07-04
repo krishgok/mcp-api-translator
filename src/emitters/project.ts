@@ -22,6 +22,7 @@ import {
   type Language,
   type ManifestSource,
   type ManifestTool,
+  type PythonVariant,
   type TranslatorManifest,
 } from "../manifest.js";
 import { GENERATOR_NAME, GENERATOR_VERSION } from "../version.js";
@@ -38,6 +39,8 @@ export interface GenerateOptions {
   force?: boolean;
   /** Output language; defaults to "typescript". */
   language?: Language;
+  /** Python server flavor; defaults to "lowlevel". Requires language: "python". */
+  pythonVariant?: PythonVariant;
   /** Also write a machine-readable tool-catalog.json for discovery layers. */
   toolCatalog?: boolean;
 }
@@ -308,11 +311,12 @@ async function emitPythonShared(
   servers: string[],
   schemes: SecurityScheme[],
   sources: t.EmitSource[],
+  variant: PythonVariant,
   toolCount: number,
 ): Promise<void> {
   const baseUrl = servers[0] ?? "";
   const pkg = py.toPackageModule(serverName);
-  await fw.write("pyproject.toml", py.pyprojectToml(serverName, serverVersion, pkg));
+  await fw.write("pyproject.toml", py.pyprojectToml(serverName, serverVersion, pkg, variant));
   await fw.write(".gitignore", py.gitignorePy());
   await fw.write(".env.example", t.envExample(baseUrl, schemes, sources));
   await fw.write("Dockerfile", py.dockerfilePy(pkg));
@@ -325,8 +329,13 @@ async function emitPythonShared(
   await fw.write(`${pkg}/config.py`, py.configPy(baseUrl, sources));
   await fw.write(`${pkg}/auth.py`, py.authPy(schemes));
   await fw.write(`${pkg}/http_client.py`, py.httpClientPy());
-  await fw.write(`${pkg}/server.py`, py.serverPy(serverName));
-  await fw.write(`${pkg}/__main__.py`, py.mainPy());
+  if (variant === "fastmcp") {
+    await fw.write(`${pkg}/server.py`, py.serverFastmcpPy(serverName));
+    await fw.write(`${pkg}/__main__.py`, py.mainFastmcpPy());
+  } else {
+    await fw.write(`${pkg}/server.py`, py.serverPy(serverName));
+    await fw.write(`${pkg}/__main__.py`, py.mainPy());
+  }
   await fw.write(`${pkg}/tools.py`, py.toolsPy());
 }
 
@@ -349,6 +358,10 @@ export async function generateProject(
   const serverVersion = options.serverVersion ?? model.version ?? "0.1.0";
   const transport = options.transport ?? "stdio";
   const language: Language = options.language ?? "typescript";
+  if (options.pythonVariant && language !== "python") {
+    throw new Error('pythonVariant requires language: "python".');
+  }
+  const pythonVariant: PythonVariant = options.pythonVariant ?? "lowlevel";
   const description = model.title + (model.version ? ` (v${model.version})` : "");
 
   const { operations, filteredOut } = curate(model, options.filters ?? {});
@@ -368,6 +381,7 @@ export async function generateProject(
       model.servers,
       model.securitySchemes,
       emitSources,
+      pythonVariant,
       tools.length,
     );
     await fw.write(
@@ -403,6 +417,7 @@ export async function generateProject(
     transport,
     servers: model.servers,
     securitySchemes: model.securitySchemes,
+    ...(language === "python" ? { pythonVariant } : {}),
     sources: [sourceEntry],
     tools: tools.map(
       (tool): ManifestTool => ({
@@ -505,6 +520,7 @@ export async function appendToProject(
       servers,
       schemes,
       emitSources,
+      manifest.pythonVariant ?? "lowlevel",
       allRecords.length,
     );
     await fw.write(toolsJson, JSON.stringify(allRecords, null, 2) + "\n");

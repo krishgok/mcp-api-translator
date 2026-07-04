@@ -119,7 +119,15 @@ into the package's single `tools.json` (preserving existing entries, idempotent 
 and regenerates the shared infrastructure from the merged model. The parser→IR→curation layers are
 reused unchanged; the manifest carries a `language` field. CI generates a Python project, appends a
 second API, and `py_compile`s the result (`npm run e2e:python`).
-**Still open:** a FastMCP-flavored variant, and per-API auth namespacing for aggregated APIs (R2).
+
+The **FastMCP-flavored variant** also shipped: `pythonVariant: "fastmcp"` emits a server built on
+FastMCP 2.x that registers each tool as a `Tool` subclass with the raw JSON-Schema input passed
+verbatim (`parameters=`) — never FastMCP's type-hint schema derivation — so the
+no-lossy-round-trip invariant holds for both flavors. The flavor is recorded in the manifest and
+preserved across extends; only `server.py`, `__main__.py`, and the dependency list differ. CI
+installs FastMCP and drives the generated server through the in-memory client to assert the wire
+schemas match `tools.json` byte-for-byte (`scripts/fastmcp-smoke.py`). Per-API auth namespacing
+for aggregated APIs shipped with R2.
 
 ### R4. Hosted / one-command deploy (optional, non-core)
 

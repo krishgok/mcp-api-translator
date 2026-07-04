@@ -55,3 +55,7 @@ jobs:
           npx tsc
       - name: Generate & compile the Python project(s)
         run: npm run e2e:python
+      - name: Smoke-test the generated FastMCP variant (in-memory client)
+        run: |
+          python -m pip install --quiet "fastmcp>=2,<3"
+          python scripts/fastmcp-smoke.py

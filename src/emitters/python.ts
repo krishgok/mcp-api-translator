@@ -38,13 +38,19 @@ export function toPackageModule(serverName: string): string {
   return mod;
 }
 
-export function pyprojectToml(name: string, version: string, pkg: string): string {
+export function pyprojectToml(
+  name: string,
+  version: string,
+  pkg: string,
+  variant: "lowlevel" | "fastmcp" = "lowlevel",
+): string {
+  const deps = variant === "fastmcp" ? '["fastmcp>=2,<3"]' : '["mcp>=1.2.0", "anyio>=4.0"]';
   return [
     "[project]",
     `name = ${JSON.stringify(name)}`,
     `version = ${JSON.stringify(version)}`,
     'requires-python = ">=3.10"',
-    'dependencies = ["mcp>=1.2.0", "anyio>=4.0"]',
+    `dependencies = ${deps}`,
     "",
     "[project.scripts]",
     `${name} = "${pkg}.__main__:run"`,
@@ -393,6 +399,70 @@ export function serverPy(name: string): string {
     '        return [types.TextContent(type="text", text=text)]',
     "    except Exception as error:  # noqa: BLE001",
     '        return [types.TextContent(type="text", text="Error: " + str(error))]',
+    "",
+  ].join("\n");
+}
+
+/**
+ * FastMCP-flavored server (opt-in): registers each tool as a `Tool` subclass carrying the raw
+ * JSON-Schema input verbatim (`parameters=`), never FastMCP's type-hint schema derivation — the
+ * no-lossy-round-trip invariant holds for both flavors.
+ */
+export function serverFastmcpPy(name: string): string {
+  return [
+    BANNER,
+    "import mcp.types as types",
+    "from fastmcp import FastMCP",
+    "from fastmcp.tools import Tool",
+    "from fastmcp.tools.tool import ToolResult",
+    "",
+    "from .http_client import call_operation",
+    "from .tools import TOOLS",
+    "",
+    `server = FastMCP(${JSON.stringify(name)})`,
+    "",
+    "",
+    "class _ApiTool(Tool):",
+    '    """One upstream operation; its raw JSON-Schema input is served verbatim."""',
+    "",
+    "    record: dict",
+    "",
+    "    async def run(self, arguments):",
+    "        try:",
+    "            text = call_operation(",
+    '                self.record["plan"], arguments or {}, self.record.get("sourceNamespace")',
+    "            )",
+    '            content = [types.TextContent(type="text", text=text)]',
+    "        except Exception as error:  # noqa: BLE001",
+    '            content = [types.TextContent(type="text", text="Error: " + str(error))]',
+    "        return ToolResult(content=content)",
+    "",
+    "",
+    "for _tool in TOOLS:",
+    "    server.add_tool(",
+    "        _ApiTool(",
+    '            name=_tool["name"],',
+    '            description=_tool["description"],',
+    '            parameters=_tool["inputSchema"],',
+    "            record=_tool,",
+    "        )",
+    "    )",
+    "",
+  ].join("\n");
+}
+
+export function mainFastmcpPy(): string {
+  return [
+    BANNER,
+    "from .server import server",
+    "",
+    "",
+    "def run():",
+    "    server.run()  # stdio by default",
+    "",
+    "",
+    'if __name__ == "__main__":',
+    "    run()",
     "",
   ].join("\n");
 }
