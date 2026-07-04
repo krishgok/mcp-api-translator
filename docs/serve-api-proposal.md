@@ -129,12 +129,18 @@ installs FastMCP and drives the generated server through the in-memory client to
 schemas match `tools.json` byte-for-byte (`scripts/fastmcp-smoke.py`). Per-API auth namespacing
 for aggregated APIs shipped with R2.
 
-### R4. Hosted / one-command deploy (optional, non-core)
+### R4. Hosted / one-command deploy (optional, non-core) — **implemented (Docker recipe + HTTP serve)**
 
 A managed or one-command (`fly`/`render`/container) deploy of a generated or served project, to
 compete with Gram/Zuplo on convenience. This is ops/product, not a library change; it should stay
-optional so the OSS tool remains self-hostable and dependency-light. Document a Dockerized `serve`
-recipe first (cheapest 80%).
+optional so the OSS tool remains self-hostable and dependency-light.
+
+Shipped: [deploy-serve.md](deploy-serve.md) documents the Dockerized `serve` recipe (stdio client
+config, spec volume mounts, env-file credentials, compose), and `serve --transport http --port N`
+serves stateless Streamable HTTP at `/mcp` — one mounted proxy backing a fresh Server per request,
+with the same DNS-rebinding protection the generated `index.http.ts` emits (`MCP_ALLOWED_HOSTS`
+override, `PORT` honored) — which is what fly/Render/Cloud Run need. CI smoke-tests the HTTP path
+end-to-end (`npm run smoke:serve:http`). A managed offering remains a non-goal.
 
 ### R5. OAuth client-credentials + refresh-token grants — **implemented**
 

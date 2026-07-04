@@ -489,6 +489,23 @@ describe("parseServeArgs", () => {
     expect(args.catalogPath).toBe("out/catalog.json");
   });
 
+  it("defaults to stdio and parses --transport http --port", () => {
+    expect(parseServeArgs(["--spec", "a.yaml"]).transport).toBe("stdio");
+    const args = parseServeArgs(["--spec", "a.yaml", "--transport", "http", "--port", "8080"]);
+    expect(args.transport).toBe("http");
+    expect(args.port).toBe(8080);
+  });
+
+  it("rejects a bad transport, a bad port, and --port without http", () => {
+    expect(() => parseServeArgs(["--spec", "a.yaml", "--transport", "ws"])).toThrow(
+      /--transport must be/,
+    );
+    expect(() =>
+      parseServeArgs(["--spec", "a.yaml", "--transport", "http", "--port", "x"]),
+    ).toThrow(/--port must be/);
+    expect(() => parseServeArgs(["--spec", "a.yaml", "--port", "8080"])).toThrow(/--port requires/);
+  });
+
   it("requires at least one --spec", () => {
     expect(() => parseServeArgs([])).toThrow(/requires at least one --spec/);
   });

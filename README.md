@@ -234,7 +234,9 @@ Full walkthrough with sample outputs and troubleshooting:
   ```
 
   `serve` runs the same request plan and env-based auth the generator would emit, so behavior matches
-  generated output exactly — it just skips the codegen step. See
+  generated output exactly — it just skips the codegen step. It speaks stdio by default, or
+  stateless Streamable HTTP with `--transport http --port 3000` (for containers and hosted
+  deploys — see [docs/deploy-serve.md](docs/deploy-serve.md) for the Docker/compose recipe). See
   [docs/serve-api-proposal.md](docs/serve-api-proposal.md) for the design and
   [docs/market-analysis.md](docs/market-analysis.md) for why both models exist.
 

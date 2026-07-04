@@ -350,6 +350,12 @@ mcp-api-translator serve --spec ./petstore.yaml
 # Aggregate several APIs into one proxy, with the same curation filters
 mcp-api-translator serve --spec ./petstore.yaml --spec ./billing.yaml \
   --methods GET,POST --include-tag pets --path-glob "/v1/**"
+
+# Streamable HTTP instead of stdio (containers / hosted deploys; see docs/deploy-serve.md)
+mcp-api-translator serve --spec ./petstore.yaml --transport http --port 3000
+
+# Write a machine-readable tool catalog (name/summary/tags) for discovery layers
+mcp-api-translator serve --spec ./petstore.yaml --catalog ./tool-catalog.json
 ```
 
 Point your MCP client at the proxy instead of a generated project:

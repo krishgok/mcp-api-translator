@@ -144,6 +144,14 @@ export class ApiProxy {
 /** Build a low-level MCP Server backed by an {@link ApiProxy}. Mount specs before connecting. */
 export function createProxyServer(): { server: Server; proxy: ApiProxy } {
   const proxy = new ApiProxy();
+  return { server: serverFor(proxy), proxy };
+}
+
+/**
+ * Wire a low-level MCP Server to an existing proxy. The stateless HTTP transport creates one
+ * Server per request, all backed by the same mounted proxy, so specs are parsed only once.
+ */
+export function serverFor(proxy: ApiProxy): Server {
   const server = new Server(
     { name: `${GENERATOR_NAME}-proxy`, version: GENERATOR_VERSION },
     { capabilities: { tools: {} } },
@@ -172,5 +180,5 @@ export function createProxyServer(): { server: Server; proxy: ApiProxy } {
     }
   });
 
-  return { server, proxy };
+  return server;
 }

@@ -22,6 +22,8 @@ jobs:
       - run: npm run build
       - name: Smoke-test the runtime proxy (serve mode)
         run: npm run smoke:serve
+      - name: Smoke-test the runtime proxy over Streamable HTTP
+        run: npm run smoke:serve:http
 
   generated-output:
     # Proves the code we emit is itself valid: generate a project, then compile it.
