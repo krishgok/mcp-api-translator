@@ -24,6 +24,7 @@ import {
   type TranslatorManifest,
 } from "../manifest.js";
 import { GENERATOR_NAME, GENERATOR_VERSION } from "../version.js";
+import { buildCatalog, CATALOG_FILENAME, type CatalogEntry } from "./catalog.js";
 import * as t from "./templates.js";
 import * as py from "./python.js";
 
@@ -36,12 +37,19 @@ export interface GenerateOptions {
   force?: boolean;
   /** Output language; defaults to "typescript". */
   language?: Language;
+  /** Also write a machine-readable tool-catalog.json for discovery layers. */
+  toolCatalog?: boolean;
 }
 
 export interface AppendOptions {
   projectDir: string;
   filters?: FilterOptions;
   force?: boolean;
+  /**
+   * Also write/refresh tool-catalog.json. Defaults to refreshing it when the project already has
+   * one, so a catalog-enabled project stays current across appends.
+   */
+  toolCatalog?: boolean;
 }
 
 export interface EmitSummary {
@@ -102,6 +110,18 @@ function assertToolCount(count: number): void {
   }
 }
 
+/** Catalog entry from a manifest tool record (legacy manifests lack summary/tags). */
+function catalogEntryFrom(tool: ManifestTool): CatalogEntry {
+  return {
+    name: tool.name,
+    summary: tool.summary ?? "",
+    tags: tool.tags ?? [],
+    method: tool.method,
+    path: tool.path,
+    sourceTitle: tool.sourceTitle,
+  };
+}
+
 export function toPackageName(title: string): string {
   const base = title
     .toLowerCase()
@@ -155,6 +175,8 @@ export function operationToToolEmit(op: Operation, sourceTitle: string): t.ToolE
     method: op.method,
     path: op.path,
     description: buildDescription(op),
+    summary: op.summary?.trim() || `${op.method} ${op.path}`,
+    tags: op.tags,
     inputSchema,
     sourceTitle,
     plan: {
@@ -339,10 +361,15 @@ export async function generateProject(
         method: tool.method,
         path: tool.path,
         sourceTitle: tool.sourceTitle,
+        summary: tool.summary,
+        tags: tool.tags,
       }),
     ),
   };
   await fw.write(MANIFEST_FILENAME, JSON.stringify(manifest, null, 2) + "\n");
+  if (options.toolCatalog) {
+    await fw.write(CATALOG_FILENAME, buildCatalog(manifest.tools.map(catalogEntryFrom)));
+  }
 
   return {
     projectDir: dir,
@@ -472,11 +499,18 @@ export async function appendToProject(
           method: tool.method,
           path: tool.path,
           sourceTitle: tool.sourceTitle,
+          summary: tool.summary,
+          tags: tool.tags,
         }),
       ),
     ],
   };
   await fw.write(MANIFEST_FILENAME, JSON.stringify(merged, null, 2) + "\n");
+  // Refresh the catalog when asked, or when the project already carries one.
+  const wantCatalog = options.toolCatalog ?? (await exists(path.join(dir, CATALOG_FILENAME)));
+  if (wantCatalog) {
+    await fw.write(CATALOG_FILENAME, buildCatalog(merged.tools.map(catalogEntryFrom)));
+  }
 
   return {
     projectDir: dir,

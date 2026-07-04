@@ -246,6 +246,7 @@ src/auth.ts             # env-based credential injection
 server.json             # MCP Registry manifest
 client-config.md        # paste-ready Claude / Cursor / Codex config
 .mcp-translator.json    # manifest that powers `extend_mcp_server`
+tool-catalog.json       # optional (toolCatalog: true): name/summary/tags per tool for discovery layers
 ```
 
 ## Assumptions & limitations

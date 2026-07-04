@@ -80,13 +80,16 @@ returned the upstream body. No files generated.
 
 These are designed here but **not yet implemented**; each is scoped so it can land independently.
 
-### R1. Complement dynamic tool discovery (instead of competing with static filters)
+### R1. Complement dynamic tool discovery (instead of competing with static filters) — **implemented**
 
 The durable curation story is to produce a clean, well-described tool set that **plays well with
 client-side Tool Search / `defer_loading`**, not to lean on `<40`-tool static pruning. Concretely:
 keep descriptions tight and disambiguated (already done in `describe.ts`); optionally emit a
-machine-readable tool catalog (name → summary → tags) so a discovery layer can rank tools. Low effort,
-high alignment with where clients are heading.
+machine-readable tool catalog (name → summary → tags) so a discovery layer can rank tools.
+Shipped: `generate_mcp_server` / `extend_mcp_server` accept `toolCatalog: true` and write a
+`tool-catalog.json` (name, summary, tags, method, path, source) at the project root — extends
+refresh it automatically once present — and `serve --catalog <path>` writes the same catalog for
+the runtime proxy at startup (`src/emitters/catalog.ts`).
 
 ### R2. Per-API base URL + auth namespacing for aggregation — **implemented (runtime `serve`)**
 

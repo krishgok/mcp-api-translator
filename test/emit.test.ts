@@ -101,6 +101,43 @@ describe("append", () => {
   });
 });
 
+describe("tool catalog", () => {
+  it("writes tool-catalog.json when enabled and refreshes it on append", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "mcpgen-"));
+    const petstore = await parseSource({ specPath: `${fixtures}/petstore.openapi.yaml` });
+    await generateProject(petstore, { outputDir: dir, toolCatalog: true });
+
+    const catalog = JSON.parse(await read(dir, "tool-catalog.json"));
+    expect(catalog.generator).toBe("mcp-api-translator");
+    expect(catalog.tools.map((t: { name: string }) => t.name).sort()).toEqual([
+      "createPet",
+      "getPetById",
+      "listPets",
+    ]);
+    const listPets = catalog.tools.find((t: { name: string }) => t.name === "listPets");
+    expect(listPets.summary).toBe("List all pets");
+    expect(listPets.tags).toEqual(["pets"]);
+    expect(listPets.method).toBe("GET");
+    expect(listPets.path).toBe("/pets");
+    // Catalog stays cheap: no schemas or request plans.
+    expect(listPets.inputSchema).toBeUndefined();
+    expect(listPets.plan).toBeUndefined();
+
+    // Appending refreshes the existing catalog without re-passing the flag.
+    const echo = await parseSource({ specPath: `${fixtures}/echo.postman.json` });
+    await appendToProject(echo, { projectDir: dir });
+    const merged = JSON.parse(await read(dir, "tool-catalog.json"));
+    expect(merged.tools).toHaveLength(6);
+  });
+
+  it("does not write a catalog unless asked", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "mcpgen-"));
+    const model = await parseSource({ specPath: `${fixtures}/petstore.openapi.yaml` });
+    const summary = await generateProject(model, { outputDir: dir });
+    expect(summary.files).not.toContain("tool-catalog.json");
+  });
+});
+
 describe("guards", () => {
   it("refuses to regenerate over an existing project without force", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "mcpgen-"));

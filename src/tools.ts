@@ -141,6 +141,12 @@ export function registerTools(server: McpServer): void {
           .enum(["stdio", "http", "both"])
           .optional()
           .describe("Transport(s) to generate (TypeScript only). Defaults to stdio."),
+        toolCatalog: z
+          .boolean()
+          .optional()
+          .describe(
+            "Also write tool-catalog.json (name/summary/tags per tool) for discovery layers.",
+          ),
         force: z.boolean().optional().describe("Overwrite a non-empty / existing project."),
         ...filterShape,
       },
@@ -153,6 +159,7 @@ export function registerTools(server: McpServer): void {
         serverVersion: args.serverVersion as string | undefined,
         language: args.language as "typescript" | "python" | undefined,
         transport: args.transport as "stdio" | "http" | "both" | undefined,
+        toolCatalog: args.toolCatalog as boolean | undefined,
         force: args.force as boolean | undefined,
         filters: filtersFrom(args),
       });
@@ -172,6 +179,12 @@ export function registerTools(server: McpServer): void {
       inputSchema: {
         projectDir: z.string().describe("Path to an existing generated project."),
         ...sourceShape,
+        toolCatalog: z
+          .boolean()
+          .optional()
+          .describe(
+            "Also write tool-catalog.json; defaults to refreshing it if the project has one.",
+          ),
         force: z.boolean().optional().describe("Overwrite existing tool files of the same name."),
         ...filterShape,
       },
@@ -180,6 +193,7 @@ export function registerTools(server: McpServer): void {
       const model = await parseSource(sourceFrom(args));
       const summary = await appendToProject(model, {
         projectDir: args.projectDir as string,
+        toolCatalog: args.toolCatalog as boolean | undefined,
         force: args.force as boolean | undefined,
         filters: filtersFrom(args),
       });
@@ -212,6 +226,8 @@ export function registerTools(server: McpServer): void {
           "oauth2 (client-credentials grant, or pre-obtained token)",
         ],
         curation: ["includeTags", "excludeOperations", "methods", "pathGlob"],
+        toolCatalog:
+          "Optional machine-readable tool-catalog.json (toolCatalog flag on generate/extend, or `serve --catalog <path>`) so discovery layers can rank tools.",
         append: true,
         toolCountWarnThreshold: TOOL_COUNT_WARN_THRESHOLD,
         limitations: [

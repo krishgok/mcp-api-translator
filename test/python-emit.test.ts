@@ -65,6 +65,17 @@ describe("python generation", () => {
   });
 });
 
+describe("python tool catalog", () => {
+  it("writes tool-catalog.json for python projects too", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pygen-"));
+    const model = await parseSource({ specPath: `${fixtures}/petstore.openapi.yaml` });
+    await generateProject(model, { outputDir: dir, language: "python", toolCatalog: true });
+    const catalog = JSON.parse(await read(dir, "tool-catalog.json"));
+    expect(catalog.tools).toHaveLength(3);
+    expect(catalog.tools[0].tags).toEqual(["pets"]);
+  });
+});
+
 describe("python oauth client-credentials", () => {
   it("emits a _get_token helper reading the client id/secret", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "pygen-"));

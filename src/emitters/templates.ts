@@ -27,6 +27,10 @@ export interface ToolEmit {
   method: string;
   path: string;
   description: string;
+  /** One-line summary for the tool catalog (spec summary, or "METHOD /path"). */
+  summary: string;
+  /** Spec tags, surfaced in the tool catalog so a discovery layer can group/rank. */
+  tags: string[];
   inputSchema: JsonSchema;
   plan: RequestPlanData;
   sourceTitle: string;

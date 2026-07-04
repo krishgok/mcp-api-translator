@@ -4,17 +4,22 @@
  *   mcp-api-translator serve --spec ./api.yaml [--spec ./other.yaml] [filters]
  *
  * Filters mirror the curation options: --include-tag, --methods, --path-glob, --exclude
- * (repeat --spec / --include-tag / --exclude to pass several). No files are written.
+ * (repeat --spec / --include-tag / --exclude to pass several). No files are written unless
+ * --catalog <path> is set, which writes a machine-readable tool catalog at startup.
  */
+import { writeFile } from "node:fs/promises";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { parseSource } from "../parsers/index.js";
 import type { FilterOptions } from "../curation/filter.js";
+import { buildCatalog } from "../emitters/catalog.js";
 import { createProxyServer } from "./server.js";
 
 interface ServeArgs {
   specs: string[];
   format?: "openapi" | "postman" | "auto";
   filters: FilterOptions;
+  /** Write a machine-readable tool catalog to this path at startup. */
+  catalogPath?: string;
 }
 
 /** Parse `serve` argv (everything after the `serve` subcommand). */
@@ -25,6 +30,7 @@ export function parseServeArgs(argv: string[]): ServeArgs {
   let methods: string[] | undefined;
   let pathGlob: string | undefined;
   let format: ServeArgs["format"] | undefined;
+  let catalogPath: string | undefined;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -52,6 +58,9 @@ export function parseServeArgs(argv: string[]): ServeArgs {
       case "--path-glob":
         pathGlob = next();
         break;
+      case "--catalog":
+        catalogPath = next();
+        break;
       case "--format": {
         const f = next();
         if (f !== "openapi" && f !== "postman" && f !== "auto") {
@@ -75,12 +84,12 @@ export function parseServeArgs(argv: string[]): ServeArgs {
   if (methods) filters.methods = methods;
   if (pathGlob) filters.pathGlob = pathGlob;
 
-  return { specs, format, filters };
+  return { specs, format, filters, catalogPath };
 }
 
 /** Mount every requested spec and serve them live over stdio. */
 export async function runServe(argv: string[]): Promise<void> {
-  const { specs, format, filters } = parseServeArgs(argv);
+  const { specs, format, filters, catalogPath } = parseServeArgs(argv);
   const { server, proxy } = createProxyServer();
 
   for (const specPath of specs) {
@@ -95,6 +104,11 @@ export async function runServe(argv: string[]): Promise<void> {
       console.error(`  env for this API (bare names also work): ${result.envVars.join(", ")}`);
     }
     for (const w of result.warnings) console.error(`  ! ${w}`);
+  }
+
+  if (catalogPath) {
+    await writeFile(catalogPath, buildCatalog(proxy.catalog()), "utf8");
+    console.error(`wrote tool catalog (${proxy.size} entries) to ${catalogPath}`);
   }
 
   const transport = new StdioServerTransport();

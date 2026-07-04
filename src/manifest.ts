@@ -23,6 +23,10 @@ export interface ManifestTool {
   method: string;
   path: string;
   sourceTitle: string;
+  /** One-line summary for the tool catalog; absent on legacy manifests. */
+  summary?: string;
+  /** Spec tags for the tool catalog; absent on legacy manifests. */
+  tags?: string[];
 }
 
 export interface ManifestSource {

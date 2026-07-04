@@ -148,6 +148,22 @@ describe("ApiProxy", () => {
     expect(calls[0]!.url.startsWith("https://staging.local/")).toBe(true);
   });
 
+  it("exposes a catalog of mounted tools (name/summary/tags, no schemas)", async () => {
+    const petstore = await parseSource({ specPath: `${fixtures}/petstore.openapi.yaml` });
+    const echo = await parseSource({ specPath: `${fixtures}/echo.postman.json` });
+    const proxy = new ApiProxy();
+    proxy.mount(petstore);
+    proxy.mount(echo);
+    const catalog = proxy.catalog();
+    expect(catalog).toHaveLength(proxy.size);
+    const listPets = catalog.find((e) => e.name === "listPets")!;
+    expect(listPets.summary).toBe("List all pets");
+    expect(listPets.tags).toEqual(["pets"]);
+    expect(listPets.method).toBe("GET");
+    expect(listPets.sourceTitle).toBe("Swagger Petstore");
+    expect(new Set(catalog.map((e) => e.sourceTitle)).size).toBe(2);
+  });
+
   it("aggregates multiple APIs and dedupes tool names across mounts", async () => {
     const petstore = await parseSource({ specPath: `${fixtures}/petstore.openapi.yaml` });
     const echo = await parseSource({ specPath: `${fixtures}/echo.postman.json` });
@@ -332,6 +348,11 @@ describe("parseServeArgs", () => {
     expect(args.filters.methods).toEqual(["GET", "POST"]);
     expect(args.filters.includeTags).toEqual(["pets"]);
     expect(args.filters.pathGlob).toBe("/v1/**");
+  });
+
+  it("parses --catalog", () => {
+    const args = parseServeArgs(["--spec", "a.yaml", "--catalog", "out/catalog.json"]);
+    expect(args.catalogPath).toBe("out/catalog.json");
   });
 
   it("requires at least one --spec", () => {
