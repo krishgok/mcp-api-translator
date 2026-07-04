@@ -37,6 +37,59 @@ describe("OpenAPI parser", () => {
       envVars: ["API_KEY"],
     });
   });
+
+  it("detects the client-credentials grant on a clientCredentials flow", async () => {
+    const model = await parseSource({ specPath: `${fixtures}/oauth.openapi.yaml` });
+    expect(model.securitySchemes[0]).toMatchObject({
+      name: "oauthCc",
+      type: "oauth2",
+      tokenUrl: "https://widgets.example.com/oauth/token",
+      grant: "client_credentials",
+      envVars: ["API_CLIENT_ID", "API_CLIENT_SECRET"],
+    });
+  });
+
+  it("detects the refresh-token grant on an authorizationCode flow (with API_TOKEN fallback)", async () => {
+    const model = await parseSource({ specPath: `${fixtures}/oauth-refresh.openapi.yaml` });
+    expect(model.securitySchemes[0]).toMatchObject({
+      name: "oauthAc",
+      type: "oauth2",
+      tokenUrl: "https://gadgets.example.com/oauth/token",
+      grant: "refresh_token",
+      envVars: ["API_CLIENT_ID", "API_CLIENT_SECRET", "API_REFRESH_TOKEN", "API_TOKEN"],
+    });
+  });
+
+  it("prefers client_credentials when a scheme declares several flows", async () => {
+    const spec = {
+      openapi: "3.0.0",
+      info: { title: "Multi", version: "1.0.0" },
+      servers: [{ url: "https://api.example.com" }],
+      paths: {
+        "/x": { get: { operationId: "getX", responses: { "200": { description: "ok" } } } },
+      },
+      components: {
+        securitySchemes: {
+          oauth: {
+            type: "oauth2",
+            flows: {
+              authorizationCode: {
+                authorizationUrl: "https://a/authorize",
+                tokenUrl: "https://a/ac-token",
+                scopes: {},
+              },
+              clientCredentials: { tokenUrl: "https://a/cc-token", scopes: {} },
+            },
+          },
+        },
+      },
+    };
+    const model = await parseSource({ spec: JSON.stringify(spec), format: "openapi" });
+    expect(model.securitySchemes[0]).toMatchObject({
+      tokenUrl: "https://a/cc-token",
+      grant: "client_credentials",
+    });
+  });
 });
 
 describe("Postman parser", () => {

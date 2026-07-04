@@ -29,10 +29,16 @@ export interface SecurityScheme {
   /** For `http` schemes: "bearer" | "basic" | ... */
   scheme?: string;
   /**
-   * OAuth2 client-credentials token endpoint, when that flow is detected. Its presence switches the
-   * scheme from "pre-obtained token" to fetch-a-token-at-runtime (env vars become client id/secret).
+   * OAuth2 token endpoint, when a non-interactive flow is detected. Its presence switches the
+   * scheme from "pre-obtained token" to fetch-a-token-at-runtime (env vars become client id/secret,
+   * plus a refresh token for the refresh_token grant).
    */
   tokenUrl?: string;
+  /**
+   * Which grant the token endpoint is used with. Absent on legacy manifests: `tokenUrl` without a
+   * `grant` always means client_credentials.
+   */
+  grant?: "client_credentials" | "refresh_token";
   /** Env var(s) the generated server reads the credential from. */
   envVars: string[];
 }

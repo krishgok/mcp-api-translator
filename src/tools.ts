@@ -223,7 +223,7 @@ export function registerTools(server: McpServer): void {
           "apiKey (header/query/cookie)",
           "http bearer",
           "http basic",
-          "oauth2 (client-credentials grant, or pre-obtained token)",
+          "oauth2 (client-credentials grant, refresh-token grant, or pre-obtained token)",
         ],
         curation: ["includeTags", "excludeOperations", "methods", "pathGlob"],
         toolCatalog:
@@ -231,7 +231,7 @@ export function registerTools(server: McpServer): void {
         append: true,
         toolCountWarnThreshold: TOOL_COUNT_WARN_THRESHOLD,
         limitations: [
-          "OAuth2 client-credentials grant is supported (token fetched + cached); no interactive authorization-code flows.",
+          "OAuth2 client-credentials and refresh-token grants are supported (tokens fetched + cached); no interactive authorization-code consent flows.",
           "Generated handlers return JSON/text; no upstream streaming or auto-pagination.",
           "Postman parameter types are inferred from examples.",
           "Output quality tracks spec quality (operationIds, descriptions).",

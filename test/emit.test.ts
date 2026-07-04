@@ -165,6 +165,26 @@ describe("oauth client-credentials (typescript)", () => {
   });
 });
 
+describe("oauth refresh-token grant (typescript)", () => {
+  it("emits getRefreshGrantToken with an API_TOKEN fallback", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "mcpgen-"));
+    const model = await parseSource({ specPath: `${fixtures}/oauth-refresh.openapi.yaml` });
+    await generateProject(model, { outputDir: dir });
+    const auth = await read(dir, "src/auth.ts");
+    expect(auth).toContain("async function getRefreshGrantToken");
+    expect(auth).toContain('grant_type: "refresh_token"');
+    expect(auth).toContain('process.env["API_REFRESH_TOKEN"]');
+    // fallback: a pre-obtained bearer still works
+    expect(auth).toContain('process.env["API_TOKEN"]');
+    // the cc helper is not emitted when no client-credentials scheme exists
+    expect(auth).not.toContain("getClientCredentialsToken");
+    const env = await read(dir, ".env.example");
+    expect(env).toContain("API_CLIENT_ID=");
+    expect(env).toContain("API_REFRESH_TOKEN=");
+    expect(env).toContain("API_TOKEN=");
+  });
+});
+
 describe("hardening", () => {
   it("does not let a spec-derived scheme name break out of a generated comment", async () => {
     // A hostile security-scheme key containing a newline + code payload.

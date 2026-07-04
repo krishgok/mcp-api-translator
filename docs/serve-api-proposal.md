@@ -120,15 +120,22 @@ compete with Gram/Zuplo on convenience. This is ops/product, not a library chang
 optional so the OSS tool remains self-hostable and dependency-light. Document a Dockerized `serve`
 recipe first (cheapest 80%).
 
-### R5. OAuth client-credentials — **implemented**
+### R5. OAuth client-credentials + refresh-token grants — **implemented**
 
 Shipped for runtime **and** generated output (TS + Python). When a spec declares an OAuth2
 `clientCredentials` flow, the parser captures its `tokenUrl` and assigns `API_CLIENT_ID` /
 `API_CLIENT_SECRET` env vars (instead of `API_TOKEN`). At call time the proxy / generated `auth`
 module exchanges the id+secret for a bearer token (`grant_type=client_credentials`) and caches it
 until ~30s before expiry. Verified live through `serve` (token fetched, `Bearer` injected) and by
-compiling the generated async-auth TS + Python in CI. **Still open:** authorization-code /
-interactive flows (a non-goal), and refresh-token grants.
+compiling the generated async-auth TS + Python in CI.
+
+The **refresh-token grant** works the same way for `authorizationCode` / `password` flows (whose
+token endpoints accept `grant_type=refresh_token`): supply a pre-obtained refresh token via
+`API_REFRESH_TOKEN` + `API_CLIENT_ID` (client secret optional for public clients) and the proxy /
+generated auth exchanges and caches access tokens; rotated refresh tokens are kept in memory. A
+pre-obtained bearer in `API_TOKEN` still works as a fallback, so setups that predate refresh
+support keep working. `clientCredentials` wins when a scheme declares several flows.
+**Still open:** authorization-code / interactive consent flows (a non-goal).
 
 ## Non-goals (still)
 

@@ -257,8 +257,9 @@ tool-catalog.json       # optional (toolCatalog: true): name/summary/tags per to
 - **Output quality tracks spec quality** — missing `operationId`s/descriptions yield weaker tool
   names and docs. Curation helps; it can't invent semantics.
 - **Auth:** API key / bearer / basic / pre-obtained OAuth token, plus the **OAuth2
-  client-credentials grant** (fetches + caches a token), all read from env. **No interactive
-  (authorization-code) OAuth flows** in v1.
+  client-credentials grant** and the **refresh-token grant** (exchange a pre-obtained refresh
+  token; tokens fetched + cached), all read from env. **No interactive (authorization-code)
+  consent flows** in v1.
 - **Responses** are returned as JSON/text; no upstream streaming or automatic pagination.
 - **Postman** parameter types are inferred from examples (Postman carries no formal schema).
 - **Not a hosted service.** It runs locally/self-hosted: `generate` ownable code, or `serve` a live

@@ -91,6 +91,22 @@ describe("python oauth client-credentials", () => {
   });
 });
 
+describe("python oauth refresh-token grant", () => {
+  it("emits _get_refresh_token with an API_TOKEN fallback", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pygen-"));
+    const model = await parseSource({ specPath: `${fixtures}/oauth-refresh.openapi.yaml` });
+    await generateProject(model, { outputDir: dir, serverName: "gadgets", language: "python" });
+    const auth = await read(dir, "gadgets/auth.py");
+    expect(auth).toContain("def _get_refresh_token(");
+    expect(auth).toContain('"grant_type": "refresh_token"');
+    expect(auth).toContain('os.environ.get("API_REFRESH_TOKEN")');
+    expect(auth).toContain('os.environ.get("API_TOKEN")');
+    expect(auth).not.toContain("def _get_token(");
+    const env = await read(dir, ".env.example");
+    expect(env).toContain("API_REFRESH_TOKEN=");
+  });
+});
+
 describe("python extend", () => {
   it("appends another API into tools.json, merges auth, and is idempotent", async () => {
     const pdir = await mkdtemp(path.join(tmpdir(), "pyext-"));

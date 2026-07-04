@@ -152,6 +152,22 @@ function authBlock(scheme: SecurityScheme): string[] {
       '      headers["authorization"] = "Basic " + Buffer.from(user + ":" + pass).toString("base64");',
     );
     lines.push("    }");
+  } else if (scheme.tokenUrl && scheme.grant === "refresh_token") {
+    // oauth2 refresh-token grant: exchange a pre-obtained refresh token for access tokens; a
+    // pre-obtained bearer in the trailing env var still works as a fallback.
+    const [id, secret, refresh, fallback] = scheme.envVars;
+    lines.push(`    const clientId = process.env[${JSON.stringify(id)}];`);
+    lines.push(`    const clientSecret = process.env[${JSON.stringify(secret)}];`);
+    lines.push(`    const refreshToken = process.env[${JSON.stringify(refresh)}];`);
+    lines.push("    if (clientId && refreshToken) {");
+    lines.push(
+      `      const token = await getRefreshGrantToken(${JSON.stringify(scheme.tokenUrl)}, clientId, clientSecret, refreshToken);`,
+    );
+    lines.push('      headers["authorization"] = "Bearer " + token;');
+    lines.push("    } else {");
+    lines.push(`      const value = process.env[${JSON.stringify(fallback)}];`);
+    lines.push('      if (value) headers["authorization"] = "Bearer " + value;');
+    lines.push("    }");
   } else if (scheme.tokenUrl) {
     // oauth2 client-credentials: exchange a client id/secret for a bearer token.
     const [id, secret] = scheme.envVars;
@@ -173,11 +189,9 @@ function authBlock(scheme: SecurityScheme): string[] {
   return lines;
 }
 
-/** Emitted token fetch + cache, only when a client-credentials scheme is present. */
-function oauthHelperTs(): string[] {
+/** Emitted client-credentials token fetch, only when such a scheme is present. */
+function oauthCcHelperTs(): string[] {
   return [
-    "const _tokenCache = new Map<string, { token: string; expiresAt: number }>();",
-    "",
     "async function getClientCredentialsToken(",
     "  tokenUrl: string,",
     "  clientId: string,",
@@ -209,9 +223,65 @@ function oauthHelperTs(): string[] {
   ];
 }
 
+/** Emitted refresh-token grant exchange, only when such a scheme is present. */
+function oauthRefreshHelperTs(): string[] {
+  return [
+    "// Rotated refresh tokens live only in memory; re-supply via env after a restart if your",
+    "// provider invalidates the old token on each exchange.",
+    "const _refreshOverrides = new Map<string, string>();",
+    "",
+    "async function getRefreshGrantToken(",
+    "  tokenUrl: string,",
+    "  clientId: string,",
+    "  clientSecret: string | undefined,",
+    "  refreshToken: string,",
+    "): Promise<string> {",
+    '    const key = tokenUrl + "|" + clientId + "|" + refreshToken;',
+    "    const hit = _tokenCache.get(key);",
+    "    if (hit && hit.expiresAt > Date.now()) return hit.token;",
+    "    const fields: Record<string, string> = {",
+    '      grant_type: "refresh_token",',
+    "      refresh_token: _refreshOverrides.get(key) ?? refreshToken,",
+    "      client_id: clientId,",
+    "    };",
+    "    if (clientSecret) fields.client_secret = clientSecret;",
+    "    const body = new URLSearchParams(fields).toString();",
+    "    const res = await fetch(tokenUrl, {",
+    '      method: "POST",',
+    '      headers: { "content-type": "application/x-www-form-urlencoded" },',
+    "      body,",
+    "    });",
+    "    const text = await res.text();",
+    "    if (!res.ok)",
+    '      throw new Error("OAuth token request failed: HTTP " + res.status + " " + text.slice(0, 300));',
+    "    const json = JSON.parse(text) as {",
+    "      access_token?: string;",
+    "      expires_in?: number;",
+    "      refresh_token?: string;",
+    "    };",
+    '    if (!json.access_token) throw new Error("OAuth token response had no access_token");',
+    "    if (json.refresh_token) _refreshOverrides.set(key, json.refresh_token);",
+    '    const ttl = typeof json.expires_in === "number" ? json.expires_in : 3600;',
+    "    _tokenCache.set(key, { token: json.access_token, expiresAt: Date.now() + ttl * 1000 - 30000 });",
+    "    return json.access_token;",
+    "}",
+    "",
+  ];
+}
+
 export function authTs(schemes: SecurityScheme[]): string {
   const body = schemes.flatMap(authBlock);
   const hasOAuth = schemes.some((s) => s.tokenUrl);
+  const hasCc = schemes.some((s) => s.tokenUrl && s.grant !== "refresh_token");
+  const hasRefresh = schemes.some((s) => s.tokenUrl && s.grant === "refresh_token");
+  const helpers = hasOAuth
+    ? [
+        "const _tokenCache = new Map<string, { token: string; expiresAt: number }>();",
+        "",
+        ...(hasCc ? oauthCcHelperTs() : []),
+        ...(hasRefresh ? oauthRefreshHelperTs() : []),
+      ]
+    : [];
   const signature = hasOAuth
     ? [
         "export async function applyAuth(",
@@ -231,7 +301,7 @@ export function authTs(schemes: SecurityScheme[]): string {
     GENERATED_BANNER,
     "",
     "// Injects credentials read from the environment. Secrets are never embedded.",
-    ...(hasOAuth ? oauthHelperTs() : []),
+    ...helpers,
     ...signature,
     ...(body.length > 0 ? body : ["  // No security schemes detected on the source API."]),
     "}",

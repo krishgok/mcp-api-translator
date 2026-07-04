@@ -104,6 +104,22 @@ function authBlockPy(scheme: SecurityScheme): string[] {
     lines.push("        if user and password:");
     lines.push('            token = base64.b64encode((user + ":" + password).encode()).decode()');
     lines.push('            headers["authorization"] = "Basic " + token');
+  } else if (scheme.tokenUrl && scheme.grant === "refresh_token") {
+    // oauth2 refresh-token grant: exchange a pre-obtained refresh token for access tokens; a
+    // pre-obtained bearer in the trailing env var still works as a fallback.
+    const [id, secret, refresh, fallback] = scheme.envVars;
+    lines.push(`        client_id = os.environ.get(${JSON.stringify(id)})`);
+    lines.push(`        client_secret = os.environ.get(${JSON.stringify(secret)})`);
+    lines.push(`        refresh_token = os.environ.get(${JSON.stringify(refresh)})`);
+    lines.push("        if client_id and refresh_token:");
+    lines.push(
+      `            token = _get_refresh_token(${JSON.stringify(scheme.tokenUrl)}, client_id, client_secret, refresh_token)`,
+    );
+    lines.push('            headers["authorization"] = "Bearer " + token');
+    lines.push("        else:");
+    lines.push(`            value = os.environ.get(${JSON.stringify(fallback)})`);
+    lines.push("            if value:");
+    lines.push('                headers["authorization"] = "Bearer " + value');
   } else if (scheme.tokenUrl) {
     // oauth2 client-credentials: exchange a client id/secret for a bearer token.
     const [id, secret] = scheme.envVars;
@@ -124,12 +140,9 @@ function authBlockPy(scheme: SecurityScheme): string[] {
   return lines;
 }
 
-/** Emitted token fetch + cache, only when a client-credentials scheme is present. */
-function oauthHelperPy(): string[] {
+/** Emitted client-credentials token fetch, only when such a scheme is present. */
+function oauthCcHelperPy(): string[] {
   return [
-    "_token_cache = {}",
-    "",
-    "",
     "def _get_token(token_url, client_id, client_secret):",
     "    key = token_url + '|' + client_id",
     "    cached = _token_cache.get(key)",
@@ -156,9 +169,62 @@ function oauthHelperPy(): string[] {
   ];
 }
 
+/** Emitted refresh-token grant exchange, only when such a scheme is present. */
+function oauthRefreshHelperPy(): string[] {
+  return [
+    "# Rotated refresh tokens live only in memory; re-supply via env after a restart if your",
+    "# provider invalidates the old token on each exchange.",
+    "_refresh_overrides = {}",
+    "",
+    "",
+    "def _get_refresh_token(token_url, client_id, client_secret, refresh_token):",
+    "    key = token_url + '|' + client_id + '|' + refresh_token",
+    "    cached = _token_cache.get(key)",
+    "    if cached and cached[1] > time.time():",
+    "        return cached[0]",
+    "    fields = {",
+    '        "grant_type": "refresh_token",',
+    '        "refresh_token": _refresh_overrides.get(key, refresh_token),',
+    '        "client_id": client_id,',
+    "    }",
+    "    if client_secret:",
+    '        fields["client_secret"] = client_secret',
+    "    data = urllib.parse.urlencode(fields).encode()",
+    "    req = urllib.request.Request(",
+    "        token_url,",
+    "        data=data,",
+    '        headers={"content-type": "application/x-www-form-urlencoded"},',
+    '        method="POST",',
+    "    )",
+    "    with urllib.request.urlopen(req) as resp:",
+    "        payload = json.loads(resp.read().decode())",
+    '    token = payload.get("access_token")',
+    "    if not token:",
+    '        raise RuntimeError("OAuth token response had no access_token")',
+    '    if payload.get("refresh_token"):',
+    '        _refresh_overrides[key] = payload["refresh_token"]',
+    '    ttl = payload.get("expires_in", 3600)',
+    "    _token_cache[key] = (token, time.time() + ttl - 30)",
+    "    return token",
+    "",
+  ];
+}
+
 export function authPy(schemes: SecurityScheme[]): string {
   const body = schemes.flatMap(authBlockPy);
   const hasOAuth = schemes.some((s) => s.tokenUrl);
+  const hasCc = schemes.some((s) => s.tokenUrl && s.grant !== "refresh_token");
+  const hasRefresh = schemes.some((s) => s.tokenUrl && s.grant === "refresh_token");
+  const helpers = hasOAuth
+    ? [
+        "_token_cache = {}",
+        "",
+        "",
+        ...(hasCc ? oauthCcHelperPy() : []),
+        ...(hasCc && hasRefresh ? [""] : []),
+        ...(hasRefresh ? oauthRefreshHelperPy() : []),
+      ]
+    : [];
   const imports = hasOAuth
     ? [
         "import base64",
@@ -174,7 +240,7 @@ export function authPy(schemes: SecurityScheme[]): string {
     ...imports,
     "",
     "",
-    ...(hasOAuth ? oauthHelperPy() : []),
+    ...helpers,
     ...(hasOAuth ? [""] : []),
     "def apply_auth(headers, query, security):",
     '    """Inject env-backed credentials. Secrets are never embedded."""',

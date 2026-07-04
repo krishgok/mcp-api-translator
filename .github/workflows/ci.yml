@@ -48,5 +48,10 @@ jobs:
         run: |
           npm install
           npx tsc
+      - name: Typecheck the generated OAuth refresh-grant project
+        working-directory: build/e2e-out-oauth-refresh
+        run: |
+          npm install
+          npx tsc
       - name: Generate & compile the Python project(s)
         run: npm run e2e:python

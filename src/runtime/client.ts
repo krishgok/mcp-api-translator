@@ -8,7 +8,7 @@
  */
 import type { SecurityScheme } from "../ir/model.js";
 import type { RequestPlanData } from "../emitters/templates.js";
-import { getClientCredentialsToken } from "./oauth.js";
+import { getClientCredentialsToken, getRefreshGrantToken } from "./oauth.js";
 
 export interface RuntimeContext {
   /** Resolved upstream base URL (env override or the spec's first server). */
@@ -66,6 +66,26 @@ async function applyAuth(
       const pass = readEnv(p!);
       if (user && pass) {
         headers["authorization"] = "Basic " + Buffer.from(user + ":" + pass).toString("base64");
+      }
+    } else if (scheme.tokenUrl && scheme.grant === "refresh_token") {
+      // oauth2 refresh-token grant: envVars = [CLIENT_ID, CLIENT_SECRET, REFRESH_TOKEN, TOKEN].
+      // The secret is optional (public clients); the trailing TOKEN var is a pre-obtained-bearer
+      // fallback so setups that predate refresh support keep working.
+      const [idVar, secretVar, refreshVar, fallbackVar] = scheme.envVars;
+      const clientId = readEnv(idVar!);
+      const refreshToken = readEnv(refreshVar!);
+      if (clientId && refreshToken) {
+        const token = await getRefreshGrantToken(
+          scheme.tokenUrl,
+          clientId,
+          readEnv(secretVar!),
+          refreshToken,
+          fetchImpl,
+        );
+        headers["authorization"] = "Bearer " + token;
+      } else if (fallbackVar) {
+        const value = readEnv(fallbackVar);
+        if (value) headers["authorization"] = "Bearer " + value;
       }
     } else if (scheme.tokenUrl) {
       // oauth2 client-credentials: envVars = [CLIENT_ID, CLIENT_SECRET] -> fetch a bearer token.
