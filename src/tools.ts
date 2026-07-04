@@ -64,6 +64,13 @@ function summaryText(verb: string, s: EmitSummary): string {
     "Files written:",
     ...s.files.map((f) => `  - ${f}`),
   ];
+  if (s.sourceEnv.length > 0) {
+    lines.push(
+      "",
+      "Per-API env vars (aggregated server; namespaced vars win over bare ones):",
+      ...s.sourceEnv.map((e) => `  - ${e}`),
+    );
+  }
   if (s.warnings.length > 0) lines.push("", "Warnings:", ...s.warnings.map((w) => `  ! ${w}`));
   lines.push(
     "",
@@ -137,10 +144,23 @@ export function registerTools(server: McpServer): void {
           .enum(["typescript", "python"])
           .optional()
           .describe("Output language. Defaults to typescript."),
+        pythonVariant: z
+          .enum(["lowlevel", "fastmcp"])
+          .optional()
+          .describe(
+            "Python server flavor (requires language: python): the low-level MCP SDK (default) " +
+              "or FastMCP. Both serve the same raw JSON-Schema tool inputs.",
+          ),
         transport: z
           .enum(["stdio", "http", "both"])
           .optional()
           .describe("Transport(s) to generate (TypeScript only). Defaults to stdio."),
+        toolCatalog: z
+          .boolean()
+          .optional()
+          .describe(
+            "Also write tool-catalog.json (name/summary/tags per tool) for discovery layers.",
+          ),
         force: z.boolean().optional().describe("Overwrite a non-empty / existing project."),
         ...filterShape,
       },
@@ -152,7 +172,9 @@ export function registerTools(server: McpServer): void {
         serverName: args.serverName as string | undefined,
         serverVersion: args.serverVersion as string | undefined,
         language: args.language as "typescript" | "python" | undefined,
+        pythonVariant: args.pythonVariant as "lowlevel" | "fastmcp" | undefined,
         transport: args.transport as "stdio" | "http" | "both" | undefined,
+        toolCatalog: args.toolCatalog as boolean | undefined,
         force: args.force as boolean | undefined,
         filters: filtersFrom(args),
       });
@@ -172,6 +194,12 @@ export function registerTools(server: McpServer): void {
       inputSchema: {
         projectDir: z.string().describe("Path to an existing generated project."),
         ...sourceShape,
+        toolCatalog: z
+          .boolean()
+          .optional()
+          .describe(
+            "Also write tool-catalog.json; defaults to refreshing it if the project has one.",
+          ),
         force: z.boolean().optional().describe("Overwrite existing tool files of the same name."),
         ...filterShape,
       },
@@ -180,6 +208,7 @@ export function registerTools(server: McpServer): void {
       const model = await parseSource(sourceFrom(args));
       const summary = await appendToProject(model, {
         projectDir: args.projectDir as string,
+        toolCatalog: args.toolCatalog as boolean | undefined,
         force: args.force as boolean | undefined,
         filters: filtersFrom(args),
       });
@@ -198,7 +227,10 @@ export function registerTools(server: McpServer): void {
     async (): Promise<CallToolResult> => {
       const features = {
         inputFormats: SUPPORTED_FORMATS,
-        outputLanguages: ["typescript", "python"],
+        outputLanguages: [
+          "typescript",
+          "python (lowlevel MCP SDK by default, or pythonVariant: fastmcp)",
+        ],
         modes: {
           generate: "Scaffold an ownable TypeScript MCP-server project (generate_mcp_server).",
           serve:
@@ -209,13 +241,15 @@ export function registerTools(server: McpServer): void {
           "apiKey (header/query/cookie)",
           "http bearer",
           "http basic",
-          "oauth2 (client-credentials grant, or pre-obtained token)",
+          "oauth2 (client-credentials grant, refresh-token grant, or pre-obtained token)",
         ],
         curation: ["includeTags", "excludeOperations", "methods", "pathGlob"],
+        toolCatalog:
+          "Optional machine-readable tool-catalog.json (toolCatalog flag on generate/extend, or `serve --catalog <path>`) so discovery layers can rank tools.",
         append: true,
         toolCountWarnThreshold: TOOL_COUNT_WARN_THRESHOLD,
         limitations: [
-          "OAuth2 client-credentials grant is supported (token fetched + cached); no interactive authorization-code flows.",
+          "OAuth2 client-credentials and refresh-token grants are supported (tokens fetched + cached); no interactive authorization-code consent flows.",
           "Generated handlers return JSON/text; no upstream streaming or auto-pagination.",
           "Postman parameter types are inferred from examples.",
           "Output quality tracks spec quality (operationIds, descriptions).",

@@ -30,4 +30,11 @@ const oauth = await parseSource({ specPath: `${fixtures}/oauth.openapi.yaml` });
 await generateProject(oauth, { outputDir: oauthOut, serverName: "e2e-oauth-mcp" });
 console.log(`generated oauth project at ${oauthOut}`);
 
+// And an OAuth refresh-token-grant project so CI compiles that auth path too.
+const refreshOut = `${out}-oauth-refresh`;
+await rm(refreshOut, { recursive: true, force: true });
+const refresh = await parseSource({ specPath: `${fixtures}/oauth-refresh.openapi.yaml` });
+await generateProject(refresh, { outputDir: refreshOut, serverName: "e2e-oauth-refresh-mcp" });
+console.log(`generated oauth-refresh project at ${refreshOut}`);
+
 console.log(`OUTPUT_DIR=${out}`);

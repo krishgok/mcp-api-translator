@@ -15,14 +15,24 @@ export const MANIFEST_FILENAME = ".mcp-translator.json";
  * Schema version of the `.mcp-translator.json` format. Bump on a breaking change to the manifest
  * shape; the append path refuses manifests written by a newer (higher) version so it never
  * misreads a format it doesn't understand.
+ *
+ * v2: per-source env namespacing — sources carry `namespace`/`baseUrl`/`schemeNames`, and the
+ * regenerated shared infrastructure threads a source namespace through auth/base-URL resolution.
+ * A v1 generator extending a v2 project would regenerate that infrastructure without the
+ * namespace parameter and break compilation, so v1 generators must refuse (which the version
+ * guard in the append path does).
  */
-export const MANIFEST_VERSION = 1;
+export const MANIFEST_VERSION = 2;
 
 export interface ManifestTool {
   name: string;
   method: string;
   path: string;
   sourceTitle: string;
+  /** One-line summary for the tool catalog; absent on legacy manifests. */
+  summary?: string;
+  /** Spec tags for the tool catalog; absent on legacy manifests. */
+  tags?: string[];
 }
 
 export interface ManifestSource {
@@ -30,10 +40,22 @@ export interface ManifestSource {
   title: string;
   version: string;
   addedAt: string;
+  /** Env namespace for this source (from its title); absent on legacy (v1) manifests. */
+  namespace?: string;
+  /** This source's first declared server; absent on legacy (v1) manifests. */
+  baseUrl?: string;
+  /** Names of the security schemes this source declared; absent on legacy (v1) manifests. */
+  schemeNames?: string[];
 }
 
 /** Output language of a generated project. */
 export type Language = "typescript" | "python";
+
+/**
+ * Python server flavor: the low-level MCP SDK (default) or FastMCP. Both register tools with the
+ * raw JSON-Schema inputs verbatim — the FastMCP variant never uses type-hint schema derivation.
+ */
+export type PythonVariant = "lowlevel" | "fastmcp";
 
 export interface TranslatorManifest {
   /** Schema version of this manifest file; see {@link MANIFEST_VERSION}. */
@@ -42,6 +64,8 @@ export interface TranslatorManifest {
   generatorVersion: string;
   /** Output language; absent on legacy (pre-Python) manifests, treated as "typescript". */
   language?: Language;
+  /** Python server flavor; absent means "lowlevel". Only meaningful when language is "python". */
+  pythonVariant?: PythonVariant;
   serverName: string;
   serverVersion: string;
   description?: string;

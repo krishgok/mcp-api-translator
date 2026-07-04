@@ -1,7 +1,7 @@
 # Design: `serve` — runtime proxy (no codegen)
 
-Status: **implemented** for the core path (single + multi-spec stdio proxy). Roadmap items below
-remain open. Motivation comes from [market-analysis.md](market-analysis.md): the market is moving
+Status: **implemented** — the core path (single + multi-spec stdio proxy) and all roadmap items
+below (R1–R5). Motivation comes from [market-analysis.md](market-analysis.md): the market is moving
 toward runtime proxies for "expose an existing API to an agent," and static generation-time curation
 is being superseded by runtime tool discovery. This adds the runtime model alongside codegen.
 
@@ -76,28 +76,40 @@ returned the upstream body. No files generated.
 
 ---
 
-## Roadmap — remaining market-analysis recommendations
+## Roadmap — market-analysis recommendations (all implemented)
 
-These are designed here but **not yet implemented**; each is scoped so it can land independently.
+Each of these landed independently; the sections below record what shipped and the remaining
+explicit non-goals.
 
-### R1. Complement dynamic tool discovery (instead of competing with static filters)
+### R1. Complement dynamic tool discovery (instead of competing with static filters) — **implemented**
 
 The durable curation story is to produce a clean, well-described tool set that **plays well with
 client-side Tool Search / `defer_loading`**, not to lean on `<40`-tool static pruning. Concretely:
 keep descriptions tight and disambiguated (already done in `describe.ts`); optionally emit a
-machine-readable tool catalog (name → summary → tags) so a discovery layer can rank tools. Low effort,
-high alignment with where clients are heading.
+machine-readable tool catalog (name → summary → tags) so a discovery layer can rank tools.
+Shipped: `generate_mcp_server` / `extend_mcp_server` accept `toolCatalog: true` and write a
+`tool-catalog.json` (name, summary, tags, method, path, source) at the project root — extends
+refresh it automatically once present — and `serve --catalog <path>` writes the same catalog for
+the runtime proxy at startup (`src/emitters/catalog.ts`).
 
-### R2. Per-API base URL + auth namespacing for aggregation — **implemented (runtime `serve`)**
+### R2. Per-API base URL + auth namespacing for aggregation — **implemented (runtime + generated)**
 
-Shipped for the runtime proxy: each mounted API gets an env namespace derived from its title
-(`envNamespace`, e.g. `SWAGGER_PETSTORE`). A tool resolves its base URL as
-`<NS>_API_BASE_URL` → `API_BASE_URL` → the spec's server, and each credential as `<NS>_<VAR>` →
-bare `<VAR>`. So aggregating two APIs that both use `API_KEY` no longer collides — set
-`PETSTORE_API_KEY` and `BILLING_API_KEY` — while a single-API proxy is unchanged (bare vars still
-work via fallback). `serve` prints each API's namespaced vars when aggregating.
-**Still open:** the same namespacing in _generated_ output (`generate`/`extend`) — owners can
-hand-edit `auth.ts`/`config.ts` meanwhile, so runtime was prioritized.
+Each mounted/aggregated API gets an env namespace derived from its title (`envNamespace`, e.g.
+`SWAGGER_PETSTORE`). A tool resolves its base URL as `<NS>_API_BASE_URL` → `API_BASE_URL` → the
+spec's server, and each credential as `<NS>_<VAR>` → bare `<VAR>`. So aggregating two APIs that
+both use `API_KEY` no longer collides — set `PETSTORE_API_KEY` and `BILLING_API_KEY` — while a
+single-API server is unchanged (bare vars still work via fallback). `serve` prints each API's
+namespaced vars when aggregating.
+
+The same model now ships in **generated output** (TS + Python): tool files carry their source's
+namespace and thread it through `callOperation` → `resolveBaseUrl`/`applyAuth` (Python:
+`call_operation(..., ns)`), `.env.example` documents the per-source vars for aggregated projects,
+and the extend summary prints them. Legacy tool files calling the old 2-argument form still
+compile and keep reading the bare vars. This required manifest schema v2 (sources now record
+`namespace`/`baseUrl`/`schemeNames`), so pre-v2 generators refuse to extend new projects instead
+of emitting code that doesn't compile. Known limitation: schemes are still merged by name on
+append (first definition wins), but credentials no longer collide because each tool reads through
+its own namespace.
 
 ### R3. Non-TypeScript output (Python first) — **implemented (generate + extend)**
 
@@ -108,24 +120,45 @@ into the package's single `tools.json` (preserving existing entries, idempotent 
 and regenerates the shared infrastructure from the merged model. The parser→IR→curation layers are
 reused unchanged; the manifest carries a `language` field. CI generates a Python project, appends a
 second API, and `py_compile`s the result (`npm run e2e:python`).
-**Still open:** a FastMCP-flavored variant, and per-API auth namespacing for aggregated APIs (R2).
 
-### R4. Hosted / one-command deploy (optional, non-core)
+The **FastMCP-flavored variant** also shipped: `pythonVariant: "fastmcp"` emits a server built on
+FastMCP 2.x that registers each tool as a `Tool` subclass with the raw JSON-Schema input passed
+verbatim (`parameters=`) — never FastMCP's type-hint schema derivation — so the
+no-lossy-round-trip invariant holds for both flavors. The flavor is recorded in the manifest and
+preserved across extends; only `server.py`, `__main__.py`, and the dependency list differ. CI
+installs FastMCP and drives the generated server through the in-memory client to assert the wire
+schemas match `tools.json` byte-for-byte (`scripts/fastmcp-smoke.py`). Per-API auth namespacing
+for aggregated APIs shipped with R2.
+
+### R4. Hosted / one-command deploy (optional, non-core) — **implemented (Docker recipe + HTTP serve)**
 
 A managed or one-command (`fly`/`render`/container) deploy of a generated or served project, to
 compete with Gram/Zuplo on convenience. This is ops/product, not a library change; it should stay
-optional so the OSS tool remains self-hostable and dependency-light. Document a Dockerized `serve`
-recipe first (cheapest 80%).
+optional so the OSS tool remains self-hostable and dependency-light.
 
-### R5. OAuth client-credentials — **implemented**
+Shipped: [deploy-serve.md](deploy-serve.md) documents the Dockerized `serve` recipe (stdio client
+config, spec volume mounts, env-file credentials, compose), and `serve --transport http --port N`
+serves stateless Streamable HTTP at `/mcp` — one mounted proxy backing a fresh Server per request,
+with the same DNS-rebinding protection the generated `index.http.ts` emits (`MCP_ALLOWED_HOSTS`
+override, `PORT` honored) — which is what fly/Render/Cloud Run need. CI smoke-tests the HTTP path
+end-to-end (`npm run smoke:serve:http`). A managed offering remains a non-goal.
+
+### R5. OAuth client-credentials + refresh-token grants — **implemented**
 
 Shipped for runtime **and** generated output (TS + Python). When a spec declares an OAuth2
 `clientCredentials` flow, the parser captures its `tokenUrl` and assigns `API_CLIENT_ID` /
 `API_CLIENT_SECRET` env vars (instead of `API_TOKEN`). At call time the proxy / generated `auth`
 module exchanges the id+secret for a bearer token (`grant_type=client_credentials`) and caches it
 until ~30s before expiry. Verified live through `serve` (token fetched, `Bearer` injected) and by
-compiling the generated async-auth TS + Python in CI. **Still open:** authorization-code /
-interactive flows (a non-goal), and refresh-token grants.
+compiling the generated async-auth TS + Python in CI.
+
+The **refresh-token grant** works the same way for `authorizationCode` / `password` flows (whose
+token endpoints accept `grant_type=refresh_token`): supply a pre-obtained refresh token via
+`API_REFRESH_TOKEN` + `API_CLIENT_ID` (client secret optional for public clients) and the proxy /
+generated auth exchanges and caches access tokens; rotated refresh tokens are kept in memory. A
+pre-obtained bearer in `API_TOKEN` still works as a fallback, so setups that predate refresh
+support keep working. `clientCredentials` wins when a scheme declares several flows.
+**Still open:** authorization-code / interactive consent flows (a non-goal).
 
 ## Non-goals (still)
 

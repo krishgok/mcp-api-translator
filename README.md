@@ -214,6 +214,10 @@ extend_mcp_server({
 // idempotent; hand-edited tool files are preserved
 ```
 
+Aggregated APIs don't share credentials: each API also reads namespaced env vars
+(`<NAMESPACE>_API_BASE_URL`, `<NAMESPACE>_API_KEY`, … — namespace derived from the API title)
+before falling back to the bare ones. The extend summary and `.env.example` list the exact names.
+
 Full walkthrough with sample outputs and troubleshooting:
 [docs/usage-workflow.md](docs/usage-workflow.md).
 
@@ -230,7 +234,9 @@ Full walkthrough with sample outputs and troubleshooting:
   ```
 
   `serve` runs the same request plan and env-based auth the generator would emit, so behavior matches
-  generated output exactly — it just skips the codegen step. See
+  generated output exactly — it just skips the codegen step. It speaks stdio by default, or
+  stateless Streamable HTTP with `--transport http --port 3000` (for containers and hosted
+  deploys — see [docs/deploy-serve.md](docs/deploy-serve.md) for the Docker/compose recipe). See
   [docs/serve-api-proposal.md](docs/serve-api-proposal.md) for the design and
   [docs/market-analysis.md](docs/market-analysis.md) for why both models exist.
 
@@ -246,18 +252,22 @@ src/auth.ts             # env-based credential injection
 server.json             # MCP Registry manifest
 client-config.md        # paste-ready Claude / Cursor / Codex config
 .mcp-translator.json    # manifest that powers `extend_mcp_server`
+tool-catalog.json       # optional (toolCatalog: true): name/summary/tags per tool for discovery layers
 ```
 
 ## Assumptions & limitations
 
 - **Inputs:** OpenAPI 3.0/3.1 and Postman v2.1 (Swagger 2.0 best-effort). No GraphQL/gRPC yet.
 - **Output languages:** TypeScript (default) and Python. Both support `generate` and
-  `extend_mcp_server` (aggregating multiple APIs into one server).
+  `extend_mcp_server` (aggregating multiple APIs into one server). Python can be flavored
+  with `pythonVariant: "fastmcp"` (FastMCP 2.x instead of the low-level SDK); both flavors
+  serve the same raw JSON-Schema tool inputs.
 - **Output quality tracks spec quality** — missing `operationId`s/descriptions yield weaker tool
   names and docs. Curation helps; it can't invent semantics.
 - **Auth:** API key / bearer / basic / pre-obtained OAuth token, plus the **OAuth2
-  client-credentials grant** (fetches + caches a token), all read from env. **No interactive
-  (authorization-code) OAuth flows** in v1.
+  client-credentials grant** and the **refresh-token grant** (exchange a pre-obtained refresh
+  token; tokens fetched + cached), all read from env. **No interactive (authorization-code)
+  consent flows** in v1.
 - **Responses** are returned as JSON/text; no upstream streaming or automatic pagination.
 - **Postman** parameter types are inferred from examples (Postman carries no formal schema).
 - **Not a hosted service.** It runs locally/self-hosted: `generate` ownable code, or `serve` a live

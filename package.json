@@ -52,6 +52,7 @@
     "e2e": "node scripts/e2e.mjs",
     "e2e:python": "node scripts/e2e-python.mjs",
     "smoke:serve": "node scripts/serve-smoke.mjs",
+    "smoke:serve:http": "node scripts/serve-http-smoke.mjs",
     "check:docs": "node scripts/check-docs.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

@@ -148,6 +148,22 @@ describe("ApiProxy", () => {
     expect(calls[0]!.url.startsWith("https://staging.local/")).toBe(true);
   });
 
+  it("exposes a catalog of mounted tools (name/summary/tags, no schemas)", async () => {
+    const petstore = await parseSource({ specPath: `${fixtures}/petstore.openapi.yaml` });
+    const echo = await parseSource({ specPath: `${fixtures}/echo.postman.json` });
+    const proxy = new ApiProxy();
+    proxy.mount(petstore);
+    proxy.mount(echo);
+    const catalog = proxy.catalog();
+    expect(catalog).toHaveLength(proxy.size);
+    const listPets = catalog.find((e) => e.name === "listPets")!;
+    expect(listPets.summary).toBe("List all pets");
+    expect(listPets.tags).toEqual(["pets"]);
+    expect(listPets.method).toBe("GET");
+    expect(listPets.sourceTitle).toBe("Swagger Petstore");
+    expect(new Set(catalog.map((e) => e.sourceTitle)).size).toBe(2);
+  });
+
   it("aggregates multiple APIs and dedupes tool names across mounts", async () => {
     const petstore = await parseSource({ specPath: `${fixtures}/petstore.openapi.yaml` });
     const echo = await parseSource({ specPath: `${fixtures}/echo.postman.json` });
@@ -314,6 +330,140 @@ describe("oauth client-credentials", () => {
   });
 });
 
+describe("oauth refresh-token grant", () => {
+  const scheme = {
+    name: "oauthAc",
+    type: "oauth2" as const,
+    tokenUrl: "https://auth.example/token",
+    grant: "refresh_token" as const,
+    envVars: ["API_CLIENT_ID", "API_CLIENT_SECRET", "API_REFRESH_TOKEN", "API_TOKEN"],
+  };
+  const plan: RequestPlanData = {
+    method: "GET",
+    pathTemplate: "/g",
+    pathParams: [],
+    queryParams: [],
+    headerParams: [],
+    cookieParams: [],
+    bodyParam: null,
+    contentType: null,
+    security: ["oauthAc"],
+  };
+
+  /** A fetch stub answering the token endpoint; optionally rotates the refresh token. */
+  function refreshIo(rotateTo?: string) {
+    const tokenBodies: (string | undefined)[] = [];
+    const apiCalls: Array<{ url: string; auth?: string }> = [];
+    const fetchImpl: FetchLike = async (url, init) => {
+      if (url.toString().includes("/token")) {
+        tokenBodies.push(init.body);
+        const payload: Record<string, unknown> = {
+          access_token: `tok-${tokenBodies.length}`,
+          expires_in: 3600,
+        };
+        if (rotateTo) payload.refresh_token = rotateTo;
+        return {
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          text: async () => JSON.stringify(payload),
+        };
+      }
+      apiCalls.push({ url: url.toString(), auth: init.headers["authorization"] });
+      return { ok: true, status: 200, statusText: "OK", text: async () => "{}" };
+    };
+    return { tokenBodies, apiCalls, fetchImpl };
+  }
+
+  it("exchanges the refresh token for a bearer and caches it", async () => {
+    clearTokenCache();
+    const io = refreshIo();
+    const ctx = {
+      baseUrl: "https://api.example",
+      securitySchemes: [scheme],
+      env: { API_CLIENT_ID: "id", API_CLIENT_SECRET: "s3", API_REFRESH_TOKEN: "rt-0" },
+    };
+    await executePlan(plan, {}, ctx, io.fetchImpl);
+    await executePlan(plan, {}, ctx, io.fetchImpl);
+    expect(io.apiCalls.map((c) => c.auth)).toEqual(["Bearer tok-1", "Bearer tok-1"]);
+    expect(io.tokenBodies).toHaveLength(1); // second call served from cache
+    expect(io.tokenBodies[0]).toContain("grant_type=refresh_token");
+    expect(io.tokenBodies[0]).toContain("refresh_token=rt-0");
+    expect(io.tokenBodies[0]).toContain("client_secret=s3");
+  });
+
+  it("omits the client secret for public clients", async () => {
+    clearTokenCache();
+    const io = refreshIo();
+    await executePlan(
+      plan,
+      {},
+      {
+        baseUrl: "https://api.example",
+        securitySchemes: [scheme],
+        env: { API_CLIENT_ID: "id", API_REFRESH_TOKEN: "rt-0" },
+      },
+      io.fetchImpl,
+    );
+    expect(io.tokenBodies[0]).not.toContain("client_secret");
+    expect(io.apiCalls[0]!.auth).toBe("Bearer tok-1");
+  });
+
+  it("uses a rotated refresh token on the next exchange", async () => {
+    clearTokenCache();
+    const io = refreshIo("rt-next");
+    const now = { t: Date.now() };
+    // First exchange stores the rotated token; expire the cache to force a second exchange.
+    const { getRefreshGrantToken } = await import("../src/runtime/oauth.js");
+    await getRefreshGrantToken(
+      "https://auth.example/token",
+      "id",
+      "s",
+      "rt-0",
+      io.fetchImpl,
+      () => now.t,
+    );
+    now.t += 3600 * 1000;
+    await getRefreshGrantToken(
+      "https://auth.example/token",
+      "id",
+      "s",
+      "rt-0",
+      io.fetchImpl,
+      () => now.t,
+    );
+    expect(io.tokenBodies).toHaveLength(2);
+    expect(io.tokenBodies[0]).toContain("refresh_token=rt-0");
+    expect(io.tokenBodies[1]).toContain("refresh_token=rt-next");
+  });
+
+  it("falls back to a pre-obtained API_TOKEN when refresh env vars are unset", async () => {
+    clearTokenCache();
+    const io = refreshIo();
+    await executePlan(
+      plan,
+      {},
+      { baseUrl: "https://api.example", securitySchemes: [scheme], env: { API_TOKEN: "legacy" } },
+      io.fetchImpl,
+    );
+    expect(io.tokenBodies).toHaveLength(0);
+    expect(io.apiCalls[0]!.auth).toBe("Bearer legacy");
+  });
+
+  it("skips auth entirely when nothing is set", async () => {
+    clearTokenCache();
+    const io = refreshIo();
+    await executePlan(
+      plan,
+      {},
+      { baseUrl: "https://api.example", securitySchemes: [scheme], env: {} },
+      io.fetchImpl,
+    );
+    expect(io.apiCalls[0]!.auth).toBeUndefined();
+    expect(io.tokenBodies).toHaveLength(0);
+  });
+});
+
 describe("parseServeArgs", () => {
   it("parses specs and filters", () => {
     const args = parseServeArgs([
@@ -332,6 +482,28 @@ describe("parseServeArgs", () => {
     expect(args.filters.methods).toEqual(["GET", "POST"]);
     expect(args.filters.includeTags).toEqual(["pets"]);
     expect(args.filters.pathGlob).toBe("/v1/**");
+  });
+
+  it("parses --catalog", () => {
+    const args = parseServeArgs(["--spec", "a.yaml", "--catalog", "out/catalog.json"]);
+    expect(args.catalogPath).toBe("out/catalog.json");
+  });
+
+  it("defaults to stdio and parses --transport http --port", () => {
+    expect(parseServeArgs(["--spec", "a.yaml"]).transport).toBe("stdio");
+    const args = parseServeArgs(["--spec", "a.yaml", "--transport", "http", "--port", "8080"]);
+    expect(args.transport).toBe("http");
+    expect(args.port).toBe(8080);
+  });
+
+  it("rejects a bad transport, a bad port, and --port without http", () => {
+    expect(() => parseServeArgs(["--spec", "a.yaml", "--transport", "ws"])).toThrow(
+      /--transport must be/,
+    );
+    expect(() =>
+      parseServeArgs(["--spec", "a.yaml", "--transport", "http", "--port", "x"]),
+    ).toThrow(/--port must be/);
+    expect(() => parseServeArgs(["--spec", "a.yaml", "--port", "8080"])).toThrow(/--port requires/);
   });
 
   it("requires at least one --spec", () => {

@@ -36,8 +36,10 @@ interface RawScheme {
   in?: "header" | "query" | "cookie";
   paramName?: string;
   scheme?: string;
-  /** OAuth2 client-credentials token endpoint, if present. */
+  /** OAuth2 token endpoint, if a non-interactive flow was detected. */
   tokenUrl?: string;
+  /** Grant the token endpoint is used with; absent means client_credentials. */
+  grant?: "client_credentials" | "refresh_token";
 }
 
 /** Friendly env var slots for a scheme, before collision resolution. */
@@ -45,8 +47,13 @@ function friendlyEnvVars(raw: RawScheme): string[] {
   if (raw.type === "http" && raw.scheme?.toLowerCase() === "basic") {
     return ["API_USERNAME", "API_PASSWORD"];
   }
-  // OAuth2 with a token endpoint = client-credentials: read a client id/secret and fetch a token.
   if (raw.tokenUrl && (raw.type === "oauth2" || raw.type === "openIdConnect")) {
+    // refresh_token grant: exchange a pre-obtained refresh token for access tokens. The trailing
+    // API_TOKEN slot is a documented fallback so a plain pre-obtained bearer keeps working.
+    if (raw.grant === "refresh_token") {
+      return ["API_CLIENT_ID", "API_CLIENT_SECRET", "API_REFRESH_TOKEN", "API_TOKEN"];
+    }
+    // client-credentials: read a client id/secret and fetch a token.
     return ["API_CLIENT_ID", "API_CLIENT_SECRET"];
   }
   if (raw.type === "http") return ["API_TOKEN"]; // bearer and other http schemes
@@ -74,6 +81,7 @@ export function assignEnvVars(rawSchemes: RawScheme[]): SecurityScheme[] {
       paramName: raw.paramName,
       scheme: raw.scheme,
       tokenUrl: raw.tokenUrl,
+      grant: raw.grant,
       envVars,
     };
   });

@@ -12,6 +12,7 @@ import type { ApiModel, JsonSchema, SecurityScheme } from "../ir/model.js";
 import { curate, TOOL_COUNT_WARN_THRESHOLD } from "../curation/index.js";
 import type { FilterOptions } from "../curation/filter.js";
 import { operationToToolEmit } from "../emitters/project.js";
+import type { CatalogEntry } from "../emitters/catalog.js";
 import { envNamespace } from "../parsers/security.js";
 import { executePlan, type FetchLike, type RuntimeContext } from "./client.js";
 import type { RequestPlanData } from "../emitters/templates.js";
@@ -20,8 +21,13 @@ import { GENERATOR_NAME, GENERATOR_VERSION } from "../version.js";
 interface MountedTool {
   name: string;
   description: string;
+  /** One-line summary + tags for the tool catalog. */
+  summary: string;
+  tags: string[];
   inputSchema: JsonSchema;
   plan: RequestPlanData;
+  /** Title of the API this tool came from. */
+  sourceTitle: string;
   /** This API's first declared server, used unless API_BASE_URL overrides it. */
   defaultBaseUrl: string;
   securitySchemes: SecurityScheme[];
@@ -57,8 +63,11 @@ export class ApiProxy {
       this.tools.set(emit.name, {
         name: emit.name,
         description: emit.description,
+        summary: emit.summary,
+        tags: emit.tags,
         inputSchema: emit.inputSchema,
         plan: emit.plan,
+        sourceTitle: emit.sourceTitle,
         defaultBaseUrl,
         securitySchemes: model.securitySchemes,
         sourceNamespace,
@@ -98,6 +107,18 @@ export class ApiProxy {
     return this.tools.size;
   }
 
+  /** Catalog entries for every mounted tool (name → summary → tags), for `serve --catalog`. */
+  catalog(): CatalogEntry[] {
+    return [...this.tools.values()].map((t) => ({
+      name: t.name,
+      summary: t.summary,
+      tags: t.tags,
+      method: t.plan.method,
+      path: t.plan.pathTemplate,
+      sourceTitle: t.sourceTitle,
+    }));
+  }
+
   /** Execute a mounted tool against the live upstream. */
   async call(
     name: string,
@@ -123,6 +144,14 @@ export class ApiProxy {
 /** Build a low-level MCP Server backed by an {@link ApiProxy}. Mount specs before connecting. */
 export function createProxyServer(): { server: Server; proxy: ApiProxy } {
   const proxy = new ApiProxy();
+  return { server: serverFor(proxy), proxy };
+}
+
+/**
+ * Wire a low-level MCP Server to an existing proxy. The stateless HTTP transport creates one
+ * Server per request, all backed by the same mounted proxy, so specs are parsed only once.
+ */
+export function serverFor(proxy: ApiProxy): Server {
   const server = new Server(
     { name: `${GENERATOR_NAME}-proxy`, version: GENERATOR_VERSION },
     { capabilities: { tools: {} } },
@@ -151,5 +180,5 @@ export function createProxyServer(): { server: Server; proxy: ApiProxy } {
     }
   });
 
-  return { server, proxy };
+  return server;
 }

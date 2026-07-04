@@ -36,6 +36,28 @@ await generateProject(oauth, {
 });
 console.log(`generated oauth python project at ${oauthOut}`);
 
+// And an OAuth refresh-token-grant Python project.
+const refreshOut = `${out}-oauth-refresh`;
+await rm(refreshOut, { recursive: true, force: true });
+const refresh = await parseSource({ specPath: `${fixtures}/oauth-refresh.openapi.yaml` });
+await generateProject(refresh, {
+  outputDir: refreshOut,
+  serverName: "e2e-oauth-refresh-py",
+  language: "python",
+});
+console.log(`generated oauth-refresh python project at ${refreshOut}`);
+
+// And a FastMCP-flavored project (raw-schema registration; smoke-tested separately in CI).
+const fastmcpOut = `${out}-fastmcp`;
+await rm(fastmcpOut, { recursive: true, force: true });
+await generateProject(await parseSource({ specPath: `${fixtures}/petstore.openapi.yaml` }), {
+  outputDir: fastmcpOut,
+  serverName: "e2e-fastmcp-py",
+  language: "python",
+  pythonVariant: "fastmcp",
+});
+console.log(`generated fastmcp python project at ${fastmcpOut}`);
+
 // Collect every generated .py file and compile it.
 async function pyFiles(dir) {
   const entries = await readdir(dir, { withFileTypes: true });
@@ -48,7 +70,12 @@ async function pyFiles(dir) {
   return files;
 }
 
-const files = [...(await pyFiles(out)), ...(await pyFiles(oauthOut))];
+const files = [
+  ...(await pyFiles(out)),
+  ...(await pyFiles(oauthOut)),
+  ...(await pyFiles(refreshOut)),
+  ...(await pyFiles(fastmcpOut)),
+];
 if (files.length === 0) throw new Error("no .py files were generated");
 const res = spawnSync("python3", ["-m", "py_compile", ...files], { stdio: "inherit" });
 if (res.status !== 0) {

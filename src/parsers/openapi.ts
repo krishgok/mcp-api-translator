@@ -126,13 +126,32 @@ function securitySchemesFrom(doc: AnyObj) {
       type = "http";
       scheme = "basic";
     }
-    // OAuth2 client-credentials token endpoint (OpenAPI 3.x flows, or Swagger 2.0 tokenUrl).
-    const tokenUrl =
-      typeof d.flows?.clientCredentials?.tokenUrl === "string"
-        ? (d.flows.clientCredentials.tokenUrl as string)
-        : d.flow === "application" && typeof d.tokenUrl === "string"
-          ? (d.tokenUrl as string)
-          : undefined;
+    // OAuth2 token endpoint (OpenAPI 3.x flows, or Swagger 2.0 flow + tokenUrl). Fully
+    // non-interactive client_credentials wins when several flows are declared; otherwise an
+    // authorizationCode/password tokenUrl is usable with a pre-obtained refresh token
+    // (grant=refresh_token). Interactive consent itself stays a non-goal.
+    let tokenUrl: string | undefined;
+    let grant: "client_credentials" | "refresh_token" | undefined;
+    const flows = (d.flows ?? {}) as AnyObj;
+    if (typeof flows.clientCredentials?.tokenUrl === "string") {
+      tokenUrl = flows.clientCredentials.tokenUrl as string;
+      grant = "client_credentials";
+    } else if (typeof flows.authorizationCode?.tokenUrl === "string") {
+      tokenUrl = flows.authorizationCode.tokenUrl as string;
+      grant = "refresh_token";
+    } else if (typeof flows.password?.tokenUrl === "string") {
+      tokenUrl = flows.password.tokenUrl as string;
+      grant = "refresh_token";
+    } else if (d.flow === "application" && typeof d.tokenUrl === "string") {
+      tokenUrl = d.tokenUrl as string;
+      grant = "client_credentials";
+    } else if (
+      (d.flow === "accessCode" || d.flow === "password") &&
+      typeof d.tokenUrl === "string"
+    ) {
+      tokenUrl = d.tokenUrl as string;
+      grant = "refresh_token";
+    }
     return {
       name,
       type,
@@ -140,6 +159,7 @@ function securitySchemesFrom(doc: AnyObj) {
       paramName: d.name,
       scheme,
       tokenUrl,
+      grant,
     };
   });
   return assignEnvVars(raw);

@@ -1,0 +1,25 @@
+openapi: 3.0.0
+info:
+  title: Gadgets API
+  version: 1.0.0
+servers:
+  - url: https://gadgets.example.com
+paths:
+  /gadgets:
+    get:
+      operationId: listGadgets
+      summary: List gadgets
+      security:
+        - oauthAc: []
+      responses:
+        "200":
+          description: ok
+components:
+  securitySchemes:
+    oauthAc:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://gadgets.example.com/oauth/authorize
+          tokenUrl: https://gadgets.example.com/oauth/token
+          scopes: {}
