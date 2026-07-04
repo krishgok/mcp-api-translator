@@ -214,6 +214,10 @@ extend_mcp_server({
 // idempotent; hand-edited tool files are preserved
 ```
 
+Aggregated APIs don't share credentials: each API also reads namespaced env vars
+(`<NAMESPACE>_API_BASE_URL`, `<NAMESPACE>_API_KEY`, … — namespace derived from the API title)
+before falling back to the bare ones. The extend summary and `.env.example` list the exact names.
+
 Full walkthrough with sample outputs and troubleshooting:
 [docs/usage-workflow.md](docs/usage-workflow.md).
 

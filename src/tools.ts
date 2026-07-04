@@ -64,6 +64,13 @@ function summaryText(verb: string, s: EmitSummary): string {
     "Files written:",
     ...s.files.map((f) => `  - ${f}`),
   ];
+  if (s.sourceEnv.length > 0) {
+    lines.push(
+      "",
+      "Per-API env vars (aggregated server; namespaced vars win over bare ones):",
+      ...s.sourceEnv.map((e) => `  - ${e}`),
+    );
+  }
   if (s.warnings.length > 0) lines.push("", "Warnings:", ...s.warnings.map((w) => `  ! ${w}`));
   lines.push(
     "",

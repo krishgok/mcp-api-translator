@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { fileURLToPath } from "node:url";
-import { mkdtemp, readFile, readdir } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { parseSource } from "../src/parsers/index.js";
@@ -60,7 +60,7 @@ describe("python generation", () => {
     const server = await read(dir, `${pkg}/server.py`);
     expect(server).toContain("from mcp.server.lowlevel import Server");
     const auth = await read(dir, `${pkg}/auth.py`);
-    expect(auth).toContain('os.environ.get("API_KEY")');
+    expect(auth).toContain('_read_env(ns, "API_KEY")');
     expect(auth).not.toContain("secret"); // no embedded credential values
   });
 });
@@ -83,7 +83,7 @@ describe("python oauth client-credentials", () => {
     await generateProject(model, { outputDir: dir, serverName: "widgets", language: "python" });
     const auth = await read(dir, "widgets/auth.py");
     expect(auth).toContain("def _get_token(");
-    expect(auth).toContain('os.environ.get("API_CLIENT_ID")');
+    expect(auth).toContain('_read_env(ns, "API_CLIENT_ID")');
     expect(auth).toContain("client_credentials");
     const env = await read(dir, ".env.example");
     expect(env).toContain("API_CLIENT_ID=");
@@ -99,8 +99,8 @@ describe("python oauth refresh-token grant", () => {
     const auth = await read(dir, "gadgets/auth.py");
     expect(auth).toContain("def _get_refresh_token(");
     expect(auth).toContain('"grant_type": "refresh_token"');
-    expect(auth).toContain('os.environ.get("API_REFRESH_TOKEN")');
-    expect(auth).toContain('os.environ.get("API_TOKEN")');
+    expect(auth).toContain('_read_env(ns, "API_REFRESH_TOKEN")');
+    expect(auth).toContain('_read_env(ns, "API_TOKEN")');
     expect(auth).not.toContain("def _get_token(");
     const env = await read(dir, ".env.example");
     expect(env).toContain("API_REFRESH_TOKEN=");
@@ -139,5 +139,59 @@ describe("python extend", () => {
     );
     expect(again.toolsAdded).toBe(0);
     expect(again.totalTools).toBe(6);
+  });
+});
+
+describe("python per-API env namespacing", () => {
+  it("records sourceNamespace per tool and resolves namespaced env vars", async () => {
+    const pdir = await mkdtemp(path.join(tmpdir(), "pyns-"));
+    const petstore = await parseSource({ specPath: `${fixtures}/petstore.openapi.yaml` });
+    await generateProject(petstore, { outputDir: pdir, serverName: "ns-py", language: "python" });
+    const echo = await parseSource({ specPath: `${fixtures}/echo.postman.json` });
+    await appendToProject(echo, { projectDir: pdir });
+
+    const tools = JSON.parse(await read(pdir, "ns_py/tools.json"));
+    const namespaces = new Set(tools.map((t: { sourceNamespace?: string }) => t.sourceNamespace));
+    expect(namespaces).toEqual(new Set(["SWAGGER_PETSTORE", "ECHO_API"]));
+
+    const config = await read(pdir, "ns_py/config.py");
+    expect(config).toContain("def resolve_base_url(ns=None):");
+    expect(config).toContain('"SWAGGER_PETSTORE": "https://petstore.example.com/v1"');
+
+    const auth = await read(pdir, "ns_py/auth.py");
+    expect(auth).toContain("def _read_env(ns, name):");
+    expect(auth).toContain("def apply_auth(headers, query, security, ns=None):");
+
+    const server = await read(pdir, "ns_py/server.py");
+    expect(server).toContain('tool.get("sourceNamespace")');
+
+    const env = await read(pdir, ".env.example");
+    expect(env).toContain("SWAGGER_PETSTORE_API_KEY=");
+    expect(env).toContain("ECHO_API_API_TOKEN=");
+  });
+
+  it("extends a legacy tools.json (no sourceNamespace) without breaking it", async () => {
+    const pdir = await mkdtemp(path.join(tmpdir(), "pyleg-"));
+    const petstore = await parseSource({ specPath: `${fixtures}/petstore.openapi.yaml` });
+    await generateProject(petstore, { outputDir: pdir, serverName: "leg-py", language: "python" });
+
+    // Simulate a pre-namespacing project: strip sourceNamespace from the records.
+    const toolsPath = path.join(pdir, "leg_py/tools.json");
+    const legacy = JSON.parse(await readFile(toolsPath, "utf8")).map(
+      ({ sourceNamespace: _sourceNamespace, ...rest }: Record<string, unknown>) => rest,
+    );
+    await writeFile(toolsPath, JSON.stringify(legacy, null, 2) + "\n");
+
+    const echo = await parseSource({ specPath: `${fixtures}/echo.postman.json` });
+    const ext = await appendToProject(echo, { projectDir: pdir });
+    expect(ext.toolsAdded).toBe(3);
+    const merged = JSON.parse(await read(pdir, "leg_py/tools.json"));
+    // Legacy records stay namespace-less (bare env vars); new ones carry their namespace.
+    expect(
+      merged.find((t: { name: string }) => t.name === "getPetById").sourceNamespace,
+    ).toBeUndefined();
+    expect(
+      merged.filter((t: { sourceNamespace?: string }) => t.sourceNamespace === "ECHO_API"),
+    ).toHaveLength(3);
   });
 });

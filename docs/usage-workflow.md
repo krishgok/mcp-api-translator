@@ -229,15 +229,18 @@ API_KEY=sk_live_xxxxxxxx                         # read at runtime; never commit
 
 Env-var naming by scheme:
 
-| Spec auth (env var mapping below)                           | Generated env var(s)                 |
-| ----------------------------------------------------------- | ------------------------------------ |
-| `apiKey` (header/query/cookie)                              | `API_KEY`                            |
-| `http` bearer / oauth2 / openIdConnect (pre-obtained token) | `API_TOKEN`                          |
-| `http` basic                                                | `API_USERNAME`, `API_PASSWORD`       |
-| `oauth2` **client-credentials** (spec has a `tokenUrl`)     | `API_CLIENT_ID`, `API_CLIENT_SECRET` |
+| Spec auth (env var mapping below)                           | Generated env var(s)                                                             |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `apiKey` (header/query/cookie)                              | `API_KEY`                                                                        |
+| `http` bearer / oauth2 / openIdConnect (pre-obtained token) | `API_TOKEN`                                                                      |
+| `http` basic                                                | `API_USERNAME`, `API_PASSWORD`                                                   |
+| `oauth2` **client-credentials** (spec has a `tokenUrl`)     | `API_CLIENT_ID`, `API_CLIENT_SECRET`                                             |
+| `oauth2` **refresh-token** (authorizationCode/password)     | `API_CLIENT_ID`, `API_CLIENT_SECRET`, `API_REFRESH_TOKEN` (`API_TOKEN` fallback) |
 
 For a client-credentials scheme, the server exchanges the id+secret for a bearer token at the spec's
-`tokenUrl` and caches it. (Multiple schemes that would collide get namespaced by scheme name.)
+`tokenUrl` and caches it. For a refresh-token scheme, supply a pre-obtained refresh token in
+`API_REFRESH_TOKEN` (client secret optional for public clients); a plain bearer in `API_TOKEN` still
+works as a fallback. (Multiple schemes that would collide get namespaced by scheme name.)
 
 > **Trust note:** a generated server calls whatever base URL the spec declares and sends your
 > credentials there. If the spec came from an untrusted source, review `config.ts` / `auth.ts` and
@@ -301,6 +304,11 @@ Key behaviors:
 - **Preserves your edits** — hand-edited `src/tools/*.ts` files are never overwritten unless you
   pass `force: true`. Shared infra (`auth.ts`, `config.ts`, `server.json`, …) is regenerated from
   the merged manifest, so credentials from both APIs are wired up.
+- **Per-API env namespacing** — each aggregated API reads its own
+  `<NAMESPACE>_API_BASE_URL` / `<NAMESPACE>_<VAR>` (namespace derived from the API title, e.g.
+  `SWAGGER_PETSTORE_API_KEY`) before falling back to the bare var, so two APIs that both use
+  `API_KEY` don't share one credential. The exact names are listed in the extend summary and in
+  the regenerated `.env.example`.
 
 After extending, `npm run build` and restart the client.
 

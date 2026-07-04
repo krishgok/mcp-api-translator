@@ -41,7 +41,7 @@ describe("project generation", () => {
   it("injects detected auth from env, never embeds secrets", async () => {
     const auth = await read(dir, "src/auth.ts");
     expect(auth).toContain('security.includes("apiKey")');
-    expect(auth).toContain('process.env["API_KEY"]');
+    expect(auth).toContain('readEnv(ns, "API_KEY")');
     const envExample = await read(dir, ".env.example");
     expect(envExample).toContain("API_KEY=");
     expect(envExample).toContain("API_BASE_URL=https://petstore.example.com/v1");
@@ -101,6 +101,59 @@ describe("append", () => {
   });
 });
 
+describe("per-API env namespacing (generated output)", () => {
+  it("threads each tool's source namespace through the generated call path", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "mcpgen-"));
+    const petstore = await parseSource({ specPath: `${fixtures}/petstore.openapi.yaml` });
+    await generateProject(petstore, { outputDir: dir, serverName: "agg-mcp" });
+    const echo = await parseSource({ specPath: `${fixtures}/echo.postman.json` });
+    const result = await appendToProject(echo, { projectDir: dir });
+
+    // Tool files carry their source's namespace and pass it to callOperation.
+    const petTool = await read(dir, "src/tools/getPetById.ts");
+    expect(petTool).toContain('const sourceNamespace = "SWAGGER_PETSTORE";');
+    expect(petTool).toContain("callOperation(plan, args, sourceNamespace)");
+    const echoToolName = (await readManifest(dir))!.tools.find(
+      (t) => t.sourceTitle === "Echo API",
+    )!.name;
+    expect(await read(dir, `src/tools/${echoToolName}.ts`)).toContain(
+      'const sourceNamespace = "ECHO_API";',
+    );
+
+    // config.ts resolves <NS>_API_BASE_URL -> API_BASE_URL -> the source's own server.
+    const config = await read(dir, "src/config.ts");
+    expect(config).toContain("export function resolveBaseUrl");
+    expect(config).toContain('"SWAGGER_PETSTORE": "https://petstore.example.com/v1"');
+
+    // auth.ts reads through the namespaced helper.
+    const auth = await read(dir, "src/auth.ts");
+    expect(auth).toContain("function readEnv(ns: string | undefined, name: string)");
+
+    // .env.example documents the per-source overrides for the aggregated server.
+    const env = await read(dir, ".env.example");
+    expect(env).toContain("SWAGGER_PETSTORE_API_BASE_URL=https://petstore.example.com/v1");
+    expect(env).toContain("SWAGGER_PETSTORE_API_KEY=");
+    expect(env).toContain("ECHO_API_API_TOKEN=");
+    // ...but each source only lists its own credentials.
+    expect(env).not.toContain("SWAGGER_PETSTORE_API_TOKEN=");
+    expect(env).not.toContain("ECHO_API_API_KEY=");
+
+    // The summary surfaces the per-API vars.
+    expect(result.sourceEnv.join("\n")).toContain("SWAGGER_PETSTORE_API_KEY");
+    expect(result.sourceEnv.join("\n")).toContain("ECHO_API_API_TOKEN");
+  });
+
+  it("keeps a single-API project's .env.example free of namespaced sections", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "mcpgen-"));
+    const model = await parseSource({ specPath: `${fixtures}/petstore.openapi.yaml` });
+    const summary = await generateProject(model, { outputDir: dir });
+    const env = await read(dir, ".env.example");
+    expect(env).not.toContain("Per-API overrides");
+    expect(env).not.toContain("SWAGGER_PETSTORE_API_KEY");
+    expect(summary.sourceEnv).toEqual([]);
+  });
+});
+
 describe("tool catalog", () => {
   it("writes tool-catalog.json when enabled and refreshes it on append", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "mcpgen-"));
@@ -155,7 +208,7 @@ describe("oauth client-credentials (typescript)", () => {
     const auth = await read(dir, "src/auth.ts");
     expect(auth).toContain("async function getClientCredentialsToken");
     expect(auth).toContain("export async function applyAuth");
-    expect(auth).toContain('process.env["API_CLIENT_ID"]');
+    expect(auth).toContain('readEnv(ns, "API_CLIENT_ID")');
     expect(auth).toContain("grant_type");
     const env = await read(dir, ".env.example");
     expect(env).toContain("API_CLIENT_ID=");
@@ -173,9 +226,9 @@ describe("oauth refresh-token grant (typescript)", () => {
     const auth = await read(dir, "src/auth.ts");
     expect(auth).toContain("async function getRefreshGrantToken");
     expect(auth).toContain('grant_type: "refresh_token"');
-    expect(auth).toContain('process.env["API_REFRESH_TOKEN"]');
+    expect(auth).toContain('readEnv(ns, "API_REFRESH_TOKEN")');
     // fallback: a pre-obtained bearer still works
-    expect(auth).toContain('process.env["API_TOKEN"]');
+    expect(auth).toContain('readEnv(ns, "API_TOKEN")');
     // the cc helper is not emitted when no client-credentials scheme exists
     expect(auth).not.toContain("getClientCredentialsToken");
     const env = await read(dir, ".env.example");

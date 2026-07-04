@@ -91,16 +91,24 @@ Shipped: `generate_mcp_server` / `extend_mcp_server` accept `toolCatalog: true` 
 refresh it automatically once present — and `serve --catalog <path>` writes the same catalog for
 the runtime proxy at startup (`src/emitters/catalog.ts`).
 
-### R2. Per-API base URL + auth namespacing for aggregation — **implemented (runtime `serve`)**
+### R2. Per-API base URL + auth namespacing for aggregation — **implemented (runtime + generated)**
 
-Shipped for the runtime proxy: each mounted API gets an env namespace derived from its title
-(`envNamespace`, e.g. `SWAGGER_PETSTORE`). A tool resolves its base URL as
-`<NS>_API_BASE_URL` → `API_BASE_URL` → the spec's server, and each credential as `<NS>_<VAR>` →
-bare `<VAR>`. So aggregating two APIs that both use `API_KEY` no longer collides — set
-`PETSTORE_API_KEY` and `BILLING_API_KEY` — while a single-API proxy is unchanged (bare vars still
-work via fallback). `serve` prints each API's namespaced vars when aggregating.
-**Still open:** the same namespacing in _generated_ output (`generate`/`extend`) — owners can
-hand-edit `auth.ts`/`config.ts` meanwhile, so runtime was prioritized.
+Each mounted/aggregated API gets an env namespace derived from its title (`envNamespace`, e.g.
+`SWAGGER_PETSTORE`). A tool resolves its base URL as `<NS>_API_BASE_URL` → `API_BASE_URL` → the
+spec's server, and each credential as `<NS>_<VAR>` → bare `<VAR>`. So aggregating two APIs that
+both use `API_KEY` no longer collides — set `PETSTORE_API_KEY` and `BILLING_API_KEY` — while a
+single-API server is unchanged (bare vars still work via fallback). `serve` prints each API's
+namespaced vars when aggregating.
+
+The same model now ships in **generated output** (TS + Python): tool files carry their source's
+namespace and thread it through `callOperation` → `resolveBaseUrl`/`applyAuth` (Python:
+`call_operation(..., ns)`), `.env.example` documents the per-source vars for aggregated projects,
+and the extend summary prints them. Legacy tool files calling the old 2-argument form still
+compile and keep reading the bare vars. This required manifest schema v2 (sources now record
+`namespace`/`baseUrl`/`schemeNames`), so pre-v2 generators refuse to extend new projects instead
+of emitting code that doesn't compile. Known limitation: schemes are still merged by name on
+append (first definition wins), but credentials no longer collide because each tool reads through
+its own namespace.
 
 ### R3. Non-TypeScript output (Python first) — **implemented (generate + extend)**
 
