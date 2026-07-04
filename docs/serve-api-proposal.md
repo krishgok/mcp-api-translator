@@ -1,7 +1,7 @@
 # Design: `serve` — runtime proxy (no codegen)
 
-Status: **implemented** for the core path (single + multi-spec stdio proxy). Roadmap items below
-remain open. Motivation comes from [market-analysis.md](market-analysis.md): the market is moving
+Status: **implemented** — the core path (single + multi-spec stdio proxy) and all roadmap items
+below (R1–R5). Motivation comes from [market-analysis.md](market-analysis.md): the market is moving
 toward runtime proxies for "expose an existing API to an agent," and static generation-time curation
 is being superseded by runtime tool discovery. This adds the runtime model alongside codegen.
 
@@ -76,9 +76,10 @@ returned the upstream body. No files generated.
 
 ---
 
-## Roadmap — remaining market-analysis recommendations
+## Roadmap — market-analysis recommendations (all implemented)
 
-These are designed here but **not yet implemented**; each is scoped so it can land independently.
+Each of these landed independently; the sections below record what shipped and the remaining
+explicit non-goals.
 
 ### R1. Complement dynamic tool discovery (instead of competing with static filters) — **implemented**
 
