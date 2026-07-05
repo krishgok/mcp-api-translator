@@ -1,6 +1,6 @@
 {
   "name": "mcp-api-translator",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "An MCP server that turns OpenAPI / Postman API definitions into runnable MCP servers, making any API discoverable to AI models.",
   "license": "AGPL-3.0-or-later",
   "author": "krishgok",
