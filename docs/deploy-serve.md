@@ -128,3 +128,48 @@ offering — the tool stays self-hostable and dependency-light.
 > before pointing real secrets at them. The HTTP endpoint itself carries **no authentication**;
 > anyone who can reach it can call your upstream APIs with your credentials. Keep it on a
 > private network or put an authenticating reverse proxy in front of it.
+
+## Logging & observability
+
+All diagnostics go to **stderr** — never stdout, which carries MCP JSON-RPC on the stdio
+transport. When stderr is not a TTY (any container), entries are JSON lines; on a TTY you get
+human-readable text. Both are tunable:
+
+- `LOG_LEVEL=debug|info|warn|error` (default `info`; `--log-level` on `serve` overrides the env).
+  `debug` adds per-tool-call timings, upstream response status/latency, and OAuth token
+  lifecycle events.
+- `LOG_FORMAT=json|text` forces a format regardless of TTY detection.
+
+Each JSON entry carries `severity` (`DEBUG`/`INFO`/`WARNING`/`ERROR`), `message`, `time`
+(RFC 3339), and flat context fields such as `tool`, `durationMs`, `status`, `method`, `path`,
+and — on the HTTP transport — a `requestId` taken from the incoming `X-Request-Id` header (or
+generated). Sensitive keys (`authorization`, `token`, `apiKey`, …) are redacted, and upstream
+URLs are logged without query strings or headers so credentials never land in logs.
+
+Generated TypeScript and Python projects ship the same logger (`src/logger.ts` / `<pkg>/log.py`)
+with identical env vars and fields, so a fleet of generated servers logs uniformly.
+
+### GKE / GCP Cloud Logging (Logs Explorer)
+
+The Cloud Logging agent ingests container stderr automatically — no sidecar or config.
+`severity`, `message`, and `time` are recognized as [special JSON fields](https://cloud.google.com/logging/docs/structured-logging),
+so entries arrive with real severities, and the context fields land under `jsonPayload`:
+
+```text
+resource.type="k8s_container"
+severity>=WARNING
+jsonPayload.tool="getPetById"
+```
+
+### EKS / AWS CloudWatch
+
+Fluent Bit (the standard EKS log shipper) or the CloudWatch agent forwards container stderr,
+and CloudWatch auto-parses JSON lines. In Logs Insights:
+
+```text
+fields @timestamp, message, tool, durationMs
+| filter severity = "ERROR" or severity = "WARNING"
+| sort @timestamp desc
+```
+
+The same works anywhere JSON-lines logs are collected (Datadog, Loki, Splunk, …).

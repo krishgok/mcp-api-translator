@@ -31,10 +31,27 @@ describe("python generation", () => {
       "auth.py",
       "config.py",
       "http_client.py",
+      "log.py",
       "server.py",
       "tools.json",
       "tools.py",
     ]);
+  });
+
+  it("emits a structured stderr logger wired through server and http client", async () => {
+    const logger = await read(dir, `${pkg}/log.py`);
+    expect(logger).toContain('"severity": record.levelname');
+    expect(logger).toContain('"message": record.getMessage()');
+    expect(logger).toContain('"time": _rfc3339(record)');
+    expect(logger).toContain("logging.StreamHandler(sys.stderr)");
+    expect(logger).toContain("logger.propagate = False");
+    expect(logger).toContain('"authorization"');
+    const server = await read(dir, `${pkg}/server.py`);
+    expect(server).toContain("from .log import get_logger");
+    const client = await read(dir, `${pkg}/http_client.py`);
+    expect(client).toContain("from .log import get_logger");
+    const main = await read(dir, `${pkg}/__main__.py`);
+    expect(main).toContain("MCP server running on stdio");
   });
 
   it("records language: python in the manifest", async () => {
@@ -158,6 +175,9 @@ describe("python fastmcp variant", () => {
     // Raw JSON-Schema inputs are registered verbatim — never type-hint derivation.
     expect(server).toContain('parameters=_tool["inputSchema"]');
     expect(server).not.toContain("mcp.server.lowlevel");
+    // The FastMCP variant logs tool calls through the shared logger too.
+    expect(server).toContain("from .log import get_logger");
+    expect(await read(dir, "fm_py/log.py")).toContain("logger.propagate = False");
 
     const pyproject = await read(dir, "pyproject.toml");
     expect(pyproject).toContain('"fastmcp>=2,<3"');

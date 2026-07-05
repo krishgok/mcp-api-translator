@@ -8,6 +8,7 @@
  * don't re-hit the token endpoint. Mirrors what the generated `auth` module does.
  */
 import type { FetchLike } from "./client.js";
+import { log } from "./logger.js";
 
 interface CacheEntry {
   token: string;
@@ -53,11 +54,18 @@ export async function getClientCredentialsToken(
   });
   const text = await response.text();
   if (!response.ok) {
+    // status only — the response body may echo the client credentials.
+    log.warn("oauth token request failed", {
+      tokenUrl,
+      grant: "client_credentials",
+      status: response.status,
+    });
     throw new Error(`OAuth token request failed: HTTP ${response.status} ${text.slice(0, 300)}`);
   }
   const json = JSON.parse(text) as { access_token?: string; expires_in?: number };
   if (!json.access_token) throw new Error("OAuth token response had no access_token");
   const ttl = typeof json.expires_in === "number" ? json.expires_in : DEFAULT_TTL_SECONDS;
+  log.debug("oauth token acquired", { tokenUrl, grant: "client_credentials", expiresIn: ttl });
   cache.set(key, { token: json.access_token, expiresAt: now() + ttl * 1000 - EARLY_REFRESH_MS });
   return json.access_token;
 }
@@ -92,6 +100,12 @@ export async function getRefreshGrantToken(
   });
   const text = await response.text();
   if (!response.ok) {
+    // status only — the response body may echo the client credentials.
+    log.warn("oauth token request failed", {
+      tokenUrl,
+      grant: "refresh_token",
+      status: response.status,
+    });
     throw new Error(`OAuth token request failed: HTTP ${response.status} ${text.slice(0, 300)}`);
   }
   const json = JSON.parse(text) as {
@@ -100,8 +114,12 @@ export async function getRefreshGrantToken(
     refresh_token?: string;
   };
   if (!json.access_token) throw new Error("OAuth token response had no access_token");
-  if (json.refresh_token) refreshOverrides.set(key, json.refresh_token);
+  if (json.refresh_token) {
+    refreshOverrides.set(key, json.refresh_token);
+    log.debug("refresh token rotated", { tokenUrl });
+  }
   const ttl = typeof json.expires_in === "number" ? json.expires_in : DEFAULT_TTL_SECONDS;
+  log.debug("oauth token acquired", { tokenUrl, grant: "refresh_token", expiresIn: ttl });
   cache.set(key, { token: json.access_token, expiresAt: now() + ttl * 1000 - EARLY_REFRESH_MS });
   return json.access_token;
 }

@@ -264,6 +264,7 @@ async function emitShared(
   );
   await fw.write("src/types.ts", t.typesTs());
   await fw.write("src/config.ts", t.configTs(baseUrl, sources));
+  await fw.write("src/logger.ts", t.loggerTs());
   await fw.write("src/auth.ts", t.authTs(schemes));
   await fw.write("src/http/client.ts", t.httpClientTs());
   await fw.write("src/server.ts", t.serverTs(serverName, serverVersion));
@@ -327,14 +328,15 @@ async function emitPythonShared(
   );
   await fw.write(`${pkg}/__init__.py`, py.initPy());
   await fw.write(`${pkg}/config.py`, py.configPy(baseUrl, sources));
+  await fw.write(`${pkg}/log.py`, py.logPy());
   await fw.write(`${pkg}/auth.py`, py.authPy(schemes));
   await fw.write(`${pkg}/http_client.py`, py.httpClientPy());
   if (variant === "fastmcp") {
     await fw.write(`${pkg}/server.py`, py.serverFastmcpPy(serverName));
-    await fw.write(`${pkg}/__main__.py`, py.mainFastmcpPy());
+    await fw.write(`${pkg}/__main__.py`, py.mainFastmcpPy(serverName));
   } else {
     await fw.write(`${pkg}/server.py`, py.serverPy(serverName));
-    await fw.write(`${pkg}/__main__.py`, py.mainPy());
+    await fw.write(`${pkg}/__main__.py`, py.mainPy(serverName));
   }
   await fw.write(`${pkg}/tools.py`, py.toolsPy());
 }

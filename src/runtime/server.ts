@@ -15,6 +15,7 @@ import { operationToToolEmit } from "../emitters/project.js";
 import type { CatalogEntry } from "../emitters/catalog.js";
 import { envNamespace } from "../parsers/security.js";
 import { executePlan, type FetchLike, type RuntimeContext } from "./client.js";
+import { log, type Logger } from "./logger.js";
 import type { RequestPlanData } from "../emitters/templates.js";
 import { GENERATOR_NAME, GENERATOR_VERSION } from "../version.js";
 
@@ -151,7 +152,7 @@ export function createProxyServer(): { server: Server; proxy: ApiProxy } {
  * Wire a low-level MCP Server to an existing proxy. The stateless HTTP transport creates one
  * Server per request, all backed by the same mounted proxy, so specs are parsed only once.
  */
-export function serverFor(proxy: ApiProxy): Server {
+export function serverFor(proxy: ApiProxy, logger: Logger = log): Server {
   const server = new Server(
     { name: `${GENERATOR_NAME}-proxy`, version: GENERATOR_VERSION },
     { capabilities: { tools: {} } },
@@ -160,14 +161,22 @@ export function serverFor(proxy: ApiProxy): Server {
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: proxy.listTools() }));
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const tool = request.params.name;
+    const start = Date.now();
     try {
       const text = await proxy.call(
-        request.params.name,
+        tool,
         (request.params.arguments ?? {}) as Record<string, unknown>,
         process.env,
       );
+      logger.debug("tool call ok", { tool, durationMs: Date.now() - start });
       return { content: [{ type: "text" as const, text }] };
     } catch (err) {
+      logger.warn("tool call failed", {
+        tool,
+        durationMs: Date.now() - start,
+        error: err instanceof Error ? err.message : String(err),
+      });
       return {
         content: [
           {

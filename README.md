@@ -240,6 +240,11 @@ Full walkthrough with sample outputs and troubleshooting:
   [docs/serve-api-proposal.md](docs/serve-api-proposal.md) for the design and
   [docs/market-analysis.md](docs/market-analysis.md) for why both models exist.
 
+  Logs are structured: JSON lines on stderr in containers (parsed natively by GCP Cloud Logging
+  and AWS CloudWatch), readable text on a TTY. Tune with `LOG_LEVEL=debug|info|warn|error` (or
+  `--log-level`) and `LOG_FORMAT=json|text`; generated projects log the same way — see
+  [docs/deploy-serve.md](docs/deploy-serve.md#logging--observability).
+
 ## Generated project layout
 
 ```
@@ -248,6 +253,7 @@ src/server.ts           # registers tools (low-level Server + JSON-Schema inputs
 src/tools/<name>.ts     # one file per operation: schema + request plan
 src/http/client.ts      # builds the request, fetch, error handling
 src/auth.ts             # env-based credential injection
+src/logger.ts           # structured stderr logger (JSON lines in containers; LOG_LEVEL/LOG_FORMAT)
 .env.example            # API_BASE_URL + any detected credentials
 server.json             # MCP Registry manifest
 client-config.md        # paste-ready Claude / Cursor / Codex config

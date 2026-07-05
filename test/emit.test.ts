@@ -38,6 +38,26 @@ describe("project generation", () => {
     expect(getPet).toContain('"type": "object"');
   });
 
+  it("emits a structured logger wired through the shared infrastructure", async () => {
+    const logger = await read(dir, "src/logger.ts");
+    expect(logger).toContain("severity: SEVERITY[entryLevel]");
+    expect(logger).toContain("process.stderr.write");
+    expect(logger).not.toContain("process.stdout");
+    expect(logger).toContain('"authorization"');
+    expect(logger).toContain("[REDACTED]");
+
+    // startup/error/tool-call/upstream paths all log through it; no bare console.error remains.
+    for (const rel of ["src/index.ts", "src/server.ts", "src/http/client.ts"]) {
+      const source = await read(dir, rel);
+      expect(source).toMatch(/from "\.{1,2}\/logger\.js"/);
+      expect(source).not.toContain("console.error");
+    }
+
+    const env = await read(dir, ".env.example");
+    expect(env).toContain("LOG_LEVEL");
+    expect(env).toContain("LOG_FORMAT");
+  });
+
   it("injects detected auth from env, never embeds secrets", async () => {
     const auth = await read(dir, "src/auth.ts");
     expect(auth).toContain('security.includes("apiKey")');

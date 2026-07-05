@@ -10,6 +10,7 @@
  * pass several). No files are written unless --catalog <path> is set, which writes a
  * machine-readable tool catalog at startup.
  */
+import { randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { createServer as createHttpServer } from "node:http";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -17,6 +18,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { parseSource } from "../parsers/index.js";
 import type { FilterOptions } from "../curation/filter.js";
 import { buildCatalog } from "../emitters/catalog.js";
+import { log, setLevel, type LogLevel } from "./logger.js";
 import { ApiProxy, serverFor } from "./server.js";
 
 interface ServeArgs {
@@ -28,6 +30,8 @@ interface ServeArgs {
   transport: "stdio" | "http";
   /** HTTP port; only meaningful with --transport http. Defaults to PORT or 3000. */
   port?: number;
+  /** Log threshold; overrides the LOG_LEVEL env var. */
+  logLevel?: LogLevel;
 }
 
 /** Parse `serve` argv (everything after the `serve` subcommand). */
@@ -41,6 +45,7 @@ export function parseServeArgs(argv: string[]): ServeArgs {
   let catalogPath: string | undefined;
   let transport: ServeArgs["transport"] = "stdio";
   let port: number | undefined;
+  let logLevel: LogLevel | undefined;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -86,6 +91,14 @@ export function parseServeArgs(argv: string[]): ServeArgs {
         }
         break;
       }
+      case "--log-level": {
+        const l = next();
+        if (l !== "debug" && l !== "info" && l !== "warn" && l !== "error") {
+          throw new Error(`--log-level must be debug, info, warn, or error (got "${l}")`);
+        }
+        logLevel = l;
+        break;
+      }
       case "--format": {
         const f = next();
         if (f !== "openapi" && f !== "postman" && f !== "auto") {
@@ -112,31 +125,35 @@ export function parseServeArgs(argv: string[]): ServeArgs {
     throw new Error("--port requires --transport http.");
   }
 
-  return { specs, format, filters, catalogPath, transport, port };
+  return { specs, format, filters, catalogPath, transport, port, logLevel };
 }
 
 /** Mount every requested spec and serve them live (stdio by default, or Streamable HTTP). */
 export async function runServe(argv: string[]): Promise<void> {
-  const { specs, format, filters, catalogPath, transport, port } = parseServeArgs(argv);
+  const { specs, format, filters, catalogPath, transport, port, logLevel } = parseServeArgs(argv);
+  if (logLevel) setLevel(logLevel);
   const proxy = new ApiProxy();
 
   for (const specPath of specs) {
     const model = await parseSource({ specPath, format });
     const result = proxy.mount(model, filters);
-    console.error(
-      `mounted ${result.mounted} tool(s) from "${model.title}" (${specPath})` +
-        (result.filteredOut ? `, ${result.filteredOut} filtered out` : ""),
-    );
+    log.info(`mounted ${result.mounted} tool(s) from "${model.title}" (${specPath})`, {
+      api: model.title,
+      mounted: result.mounted,
+      filteredOut: result.filteredOut,
+    });
     if (specs.length > 1) {
       // When aggregating, each API has its own env namespace so credentials don't collide.
-      console.error(`  env for this API (bare names also work): ${result.envVars.join(", ")}`);
+      log.info(`env for this API (bare names also work): ${result.envVars.join(", ")}`, {
+        api: model.title,
+      });
     }
-    for (const w of result.warnings) console.error(`  ! ${w}`);
+    for (const w of result.warnings) log.warn(w, { api: model.title });
   }
 
   if (catalogPath) {
     await writeFile(catalogPath, buildCatalog(proxy.catalog()), "utf8");
-    console.error(`wrote tool catalog (${proxy.size} entries) to ${catalogPath}`);
+    log.info(`wrote tool catalog (${proxy.size} entries) to ${catalogPath}`);
   }
 
   if (transport === "http") {
@@ -146,7 +163,7 @@ export async function runServe(argv: string[]): Promise<void> {
 
   const server = serverFor(proxy);
   await server.connect(new StdioServerTransport());
-  console.error(`mcp-api-translator proxy serving ${proxy.size} tool(s) on stdio`);
+  log.info(`mcp-api-translator proxy serving ${proxy.size} tool(s) on stdio`);
 }
 
 /**
@@ -162,11 +179,29 @@ function serveHttp(proxy: ApiProxy, port: number): void {
     .filter(Boolean);
 
   createHttpServer(async (req, res) => {
+    const start = Date.now();
+    const header = req.headers["x-request-id"];
+    const requestId = (Array.isArray(header) ? header[0] : header) || randomUUID();
+    const rlog = log.child({ requestId });
+    let logged = false;
+    const logRequest = (): void => {
+      if (logged) return;
+      logged = true;
+      rlog.info("http request", {
+        method: req.method,
+        path: req.url,
+        status: res.statusCode,
+        durationMs: Date.now() - start,
+      });
+    };
     if (!req.url || !req.url.startsWith("/mcp")) {
       res.statusCode = 404;
       res.end("Not found");
+      rlog.debug("http request (not found)", { method: req.method, path: req.url, status: 404 });
       return;
     }
+    res.on("finish", logRequest);
+    res.on("close", logRequest);
     const server = serverFor(proxy);
     const httpTransport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
@@ -180,7 +215,7 @@ function serveHttp(proxy: ApiProxy, port: number): void {
     await server.connect(httpTransport);
     await httpTransport.handleRequest(req, res);
   }).listen(port, () => {
-    console.error(
+    log.info(
       `mcp-api-translator proxy serving ${proxy.size} tool(s) on http://localhost:${port}/mcp`,
     );
   });

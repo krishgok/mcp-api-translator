@@ -7,12 +7,13 @@
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createServer } from "./server.js";
 import { runServe } from "./runtime/cli.js";
+import { log } from "./runtime/logger.js";
 
 async function runMeta(): Promise<void> {
   const server = createServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("mcp-api-translator running on stdio");
+  log.info("mcp-api-translator running on stdio");
 }
 
 async function main(): Promise<void> {
@@ -25,6 +26,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  console.error(err);
+  log.error("fatal", { error: err });
   process.exit(1);
 });
