@@ -506,6 +506,14 @@ describe("parseServeArgs", () => {
     expect(() => parseServeArgs(["--spec", "a.yaml", "--port", "8080"])).toThrow(/--port requires/);
   });
 
+  it("parses --log-level and rejects an invalid one", () => {
+    expect(parseServeArgs(["--spec", "a.yaml"]).logLevel).toBeUndefined();
+    expect(parseServeArgs(["--spec", "a.yaml", "--log-level", "debug"]).logLevel).toBe("debug");
+    expect(() => parseServeArgs(["--spec", "a.yaml", "--log-level", "verbose"])).toThrow(
+      /--log-level must be/,
+    );
+  });
+
   it("requires at least one --spec", () => {
     expect(() => parseServeArgs([])).toThrow(/requires at least one --spec/);
   });

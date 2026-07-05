@@ -8,6 +8,7 @@
  */
 import type { SecurityScheme } from "../ir/model.js";
 import type { RequestPlanData } from "../emitters/templates.js";
+import { log } from "./logger.js";
 import { getClientCredentialsToken, getRefreshGrantToken } from "./oauth.js";
 
 export interface RuntimeContext {
@@ -161,8 +162,16 @@ export async function executePlan(
     }
   }
   await applyAuth(headers, url, plan.security, ctx, fetchImpl);
+  const start = Date.now();
   const response = await fetchImpl(url, { method: plan.method, headers, body });
   const text = await response.text();
+  // origin + pathname only: query strings can carry apiKey credentials, headers always might.
+  log.debug("upstream response", {
+    method: plan.method,
+    url: url.origin + url.pathname,
+    status: response.status,
+    durationMs: Date.now() - start,
+  });
   if (!response.ok) {
     throw new Error(
       "HTTP " + response.status + " " + response.statusText + ": " + text.slice(0, 800),
