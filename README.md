@@ -18,10 +18,11 @@ a server, or extend an existing one.
 
 No install step. `npx` fetches and runs the latest published version — cross-platform, Node 20+.
 
-### Claude Desktop / Claude Code
+### Claude Desktop
 
-Add to `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/`, Windows:
-`%APPDATA%\Claude\`) or your `mcp.json`:
+Add to `claude_desktop_config.json` (macOS:
+`~/Library/Application Support/Claude/claude_desktop_config.json`, Windows:
+`%APPDATA%\Claude\claude_desktop_config.json`):
 
 ```json
 {
@@ -33,6 +34,32 @@ Add to `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claud
   }
 }
 ```
+
+### Claude Code
+
+Claude Code does **not** read `claude_desktop_config.json` — it keeps its own MCP config. Add the
+server with the CLI:
+
+```bash
+claude mcp add api-translator -- npx -y mcp-api-translator
+```
+
+That registers it at `local` scope (just you, just the current project). Use `-s user` to make it
+available across all your projects, or check a project-scoped `.mcp.json` into the repo root to
+share it with everyone who clones:
+
+```json
+{
+  "mcpServers": {
+    "api-translator": {
+      "command": "npx",
+      "args": ["-y", "mcp-api-translator"]
+    }
+  }
+}
+```
+
+Verify with `claude mcp list`, which health-checks each configured server.
 
 <details>
 <summary><strong>Cursor</strong></summary>
@@ -113,8 +140,9 @@ directory: `-v ${PWD}:/workspace` and pass `/workspace/...` as `specPath` / `out
 
 </details>
 
-MCP config is read at startup, so quit and reopen your client (Claude Desktop, Cursor, …) to pick
-up the new server — its four tools should then appear. Then see [Usage](#usage).
+MCP config is read at startup, so restart your client to pick up the new server — quit and reopen
+Claude Desktop, Cursor, …, or start a new session in Claude Code. Its four tools should then
+appear. Then see [Usage](#usage).
 
 ## Why this exists (and an honest take on the space)
 

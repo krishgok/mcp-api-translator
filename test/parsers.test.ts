@@ -60,6 +60,18 @@ describe("OpenAPI parser", () => {
     });
   });
 
+  it("substitutes server variables with their declared defaults", async () => {
+    const model = await parseSource({ specPath: `${fixtures}/server-vars.openapi.yaml` });
+    expect(model.servers).toEqual([
+      // both placeholders resolved from `variables[*].default`
+      "http://HOSTNAME/api/v3",
+      // declared variable resolved; undeclared one left intact rather than blanked
+      "https://eu-west-1.example.com/{undeclared}",
+      // no variables block: untouched
+      "https://static.example.com/v1",
+    ]);
+  });
+
   it("prefers client_credentials when a scheme declares several flows", async () => {
     const spec = {
       openapi: "3.0.0",

@@ -404,3 +404,48 @@ describe("hardening", () => {
     expect(tool).toContain('"required"');
   });
 });
+
+describe("missing-auth warning", () => {
+  const noAuthSpec = {
+    openapi: "3.0.0",
+    info: { title: "No Auth API", version: "1.0.0" },
+    servers: [{ url: "https://api.example.com" }],
+    paths: {
+      "/ping": { get: { operationId: "ping", responses: { "200": { description: "ok" } } } },
+    },
+  };
+
+  it("warns when a generated project's spec declares no security schemes", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "mcpgen-"));
+    const model = await parseSource({ spec: JSON.stringify(noAuthSpec), format: "openapi" });
+    const summary = await generateProject(model, { outputDir: dir });
+
+    expect(model.securitySchemes).toEqual([]);
+    expect(summary.warnings.some((w) => w.includes("No security schemes are declared"))).toBe(true);
+  });
+
+  it("stays quiet when the spec does declare a scheme", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "mcpgen-"));
+    const model = await parseSource({ specPath: `${fixtures}/petstore.openapi.yaml` });
+    const summary = await generateProject(model, { outputDir: dir });
+
+    expect(summary.warnings.some((w) => w.includes("No security schemes are declared"))).toBe(
+      false,
+    );
+  });
+
+  it("stays quiet on append when another source already contributed a scheme", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "mcpgen-"));
+    // petstore declares an apiKey scheme; the appended spec declares none.
+    const base = await parseSource({ specPath: `${fixtures}/petstore.openapi.yaml` });
+    await generateProject(base, { outputDir: dir, serverName: "agg-mcp" });
+
+    const added = await parseSource({ spec: JSON.stringify(noAuthSpec), format: "openapi" });
+    const summary = await appendToProject(added, { projectDir: dir });
+
+    expect(summary.toolsAdded).toBe(1);
+    expect(summary.warnings.some((w) => w.includes("No security schemes are declared"))).toBe(
+      false,
+    );
+  });
+});

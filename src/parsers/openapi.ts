@@ -52,9 +52,25 @@ function normalizeSchema(schema: any, isV30: boolean): JsonSchema {
   return out;
 }
 
+/**
+ * Substitute `{var}` placeholders in a server URL with the defaults the spec declares for them.
+ * OpenAPI requires a `default` on every server variable, so this is well-defined; a placeholder
+ * with no usable default is left alone rather than silently blanked, keeping the gap visible.
+ */
+function applyServerVariables(url: string, variables: unknown): string {
+  if (!variables || typeof variables !== "object") return url;
+  const vars = variables as Record<string, AnyObj | undefined>;
+  return url.replace(/\{([^{}]+)\}/g, (placeholder, name: string) => {
+    const value = vars[name]?.default;
+    return value === undefined || value === null ? placeholder : String(value);
+  });
+}
+
 function serversFrom(doc: AnyObj): string[] {
   if (Array.isArray(doc.servers) && doc.servers.length > 0) {
-    return doc.servers.map((s: AnyObj) => String(s.url)).filter(Boolean);
+    return doc.servers
+      .map((s: AnyObj) => applyServerVariables(String(s.url), s.variables))
+      .filter(Boolean);
   }
   // Swagger 2.0 fallback.
   if (doc.host) {

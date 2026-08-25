@@ -10,7 +10,12 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { parseSource, SUPPORTED_FORMATS, type SourceInput } from "./parsers/index.js";
 import { curate, TOOL_COUNT_WARN_THRESHOLD } from "./curation/index.js";
-import { appendToProject, generateProject, type EmitSummary } from "./emitters/project.js";
+import {
+  appendToProject,
+  generateProject,
+  noAuthWarnings,
+  type EmitSummary,
+} from "./emitters/project.js";
 import type { FilterOptions } from "./curation/filter.js";
 
 const sourceShape = {
@@ -117,10 +122,15 @@ export function registerTools(server: McpServer): void {
           summary: op.summary ?? "",
         })),
       };
-      const warn =
-        operations.length > TOOL_COUNT_WARN_THRESHOLD
-          ? `\n\n! ${operations.length} tools exceed the ${TOOL_COUNT_WARN_THRESHOLD}-tool guideline; consider includeTags / methods / pathGlob.`
-          : "";
+      const warnings = [
+        ...(operations.length > TOOL_COUNT_WARN_THRESHOLD
+          ? [
+              `${operations.length} tools exceed the ${TOOL_COUNT_WARN_THRESHOLD}-tool guideline; consider includeTags / methods / pathGlob.`,
+            ]
+          : []),
+        ...noAuthWarnings(model.securitySchemes),
+      ];
+      const warn = warnings.map((w) => `\n\n! ${w}`).join("");
       return text(JSON.stringify(report, null, 2) + warn);
     },
   );
