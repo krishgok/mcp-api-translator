@@ -1,0 +1,30 @@
+openapi: 3.0.3
+info:
+  title: Server Variables API
+  version: 1.0.0
+servers:
+  # Every placeholder has a declared default (as OpenAPI requires).
+  - url: "{protocol}://{hostname}/api/v3"
+    variables:
+      hostname:
+        description: Self-hosted hostname
+        default: HOSTNAME
+      protocol:
+        description: Self-hosted protocol
+        default: http
+        enum: [http, https]
+  # A variable the spec never declares: the placeholder must survive untouched.
+  - url: "https://{region}.example.com/{undeclared}"
+    variables:
+      region:
+        default: eu-west-1
+  # No variables block at all: untouched.
+  - url: "https://static.example.com/v1"
+paths:
+  /ping:
+    get:
+      operationId: ping
+      summary: Ping
+      responses:
+        "200":
+          description: ok
