@@ -444,7 +444,7 @@ export async function generateProject(
     toolsSkipped: filteredOut,
     totalTools: tools.length,
     files: fw.written,
-    warnings: toolCountWarnings(tools.length),
+    warnings: [...toolCountWarnings(tools.length), ...noAuthWarnings(model.securitySchemes)],
     sourceEnv: sourceEnvHints(emitSources),
   };
 }
@@ -584,7 +584,9 @@ export async function appendToProject(
     toolsSkipped: filtered.length - newOps.length + skippedFiles,
     totalTools: allToolNames.length,
     files: fw.written,
-    warnings: toolCountWarnings(allToolNames.length),
+    // `schemes` is the merged set, so an appended API that declares no auth stays quiet as long as
+    // the project already has a scheme from another source.
+    warnings: [...toolCountWarnings(allToolNames.length), ...noAuthWarnings(schemes)],
     sourceEnv: sourceEnvHints(emitSources),
   };
 }
@@ -608,4 +610,17 @@ function toolCountWarnings(count: number): string[] {
     ];
   }
   return [];
+}
+
+/**
+ * "The spec declares no auth" and "the API needs no auth" are not the same thing, and for any
+ * non-trivial API the first is far more likely — some large real-world specs (e.g. the GitHub
+ * Enterprise Server description) model no security at all. Without this the generated server
+ * builds and runs but is rejected by the upstream on every call, with nothing pointing at why.
+ */
+export function noAuthWarnings(schemes: SecurityScheme[]): string[] {
+  if (schemes.length > 0) return [];
+  return [
+    "No security schemes are declared in this spec, so the generated server sends unauthenticated requests. If the API needs credentials, add them to the generated auth helper by hand.",
+  ];
 }
