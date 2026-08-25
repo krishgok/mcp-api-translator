@@ -5,7 +5,7 @@
  * We prefer friendly names (API_KEY, API_TOKEN, ...) and only namespace by scheme name when two
  * schemes would otherwise collide.
  */
-import type { SecurityScheme, SecuritySchemeType } from "../ir/model.js";
+import type { ApiModel, SecurityScheme, SecuritySchemeType } from "../ir/model.js";
 
 function envPrefix(schemeName: string): string {
   return (
@@ -59,6 +59,64 @@ function friendlyEnvVars(raw: RawScheme): string[] {
   if (raw.type === "http") return ["API_TOKEN"]; // bearer and other http schemes
   if (raw.type === "oauth2" || raw.type === "openIdConnect") return ["API_TOKEN"];
   return ["API_KEY"]; // apiKey and anything else
+}
+
+/**
+ * A caller-supplied auth scheme, for APIs whose spec models no security of its own (see the
+ * warning `noAuthWarnings` emits). Mirrors the OpenAPI shapes the emitters already handle.
+ */
+export type AuthOverride =
+  | { type: "apiKey"; in?: "header" | "query" | "cookie"; name?: string }
+  | { type: "http"; scheme: "bearer" | "basic" }
+  | { type: "oauth2"; tokenUrl: string; grant?: "client_credentials" | "refresh_token" };
+
+/** Scheme name for an override, avoiding collision with anything the spec already declares. */
+function overrideName(taken: Iterable<string>): string {
+  const used = new Set(taken);
+  let name = "authOverride";
+  for (let i = 2; used.has(name); i++) name = `authOverride${i}`;
+  return name;
+}
+
+/**
+ * Attach a caller-supplied scheme to a model, for specs that declare no usable security.
+ *
+ * Applied only to operations whose own security list is empty: a spec that does model auth for an
+ * operation is describing something the override cannot know better, so those are left alone. Env
+ * vars are re-derived across the whole set so the override cannot silently claim a slot (API_KEY,
+ * API_TOKEN, ...) that a declared scheme already uses.
+ */
+export function applyAuthOverride(
+  model: ApiModel,
+  override: AuthOverride,
+  /** Extra names already claimed elsewhere — e.g. schemes an existing project's manifest holds. */
+  reserved: string[] = [],
+): ApiModel {
+  const name = overrideName([...model.securitySchemes.map((s) => s.name), ...reserved]);
+  const raw: RawScheme =
+    override.type === "apiKey"
+      ? {
+          name,
+          type: "apiKey",
+          in: override.in ?? "header",
+          paramName: override.name ?? "X-API-Key",
+        }
+      : override.type === "http"
+        ? { name, type: "http", scheme: override.scheme }
+        : {
+            name,
+            type: "oauth2",
+            tokenUrl: override.tokenUrl,
+            grant: override.grant ?? "client_credentials",
+          };
+
+  return {
+    ...model,
+    securitySchemes: assignEnvVars([...model.securitySchemes, raw]),
+    operations: model.operations.map((op) =>
+      op.security.length === 0 ? { ...op, security: [name] } : op,
+    ),
+  };
 }
 
 /**

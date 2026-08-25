@@ -9,6 +9,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { parseSource, SUPPORTED_FORMATS, type SourceInput } from "./parsers/index.js";
+import type { AuthOverride } from "./parsers/security.js";
 import { curate, TOOL_COUNT_WARN_THRESHOLD } from "./curation/index.js";
 import {
   appendToProject,
@@ -26,6 +27,30 @@ const sourceShape = {
     .optional()
     .describe("Force a format; defaults to auto-detect."),
 };
+
+/**
+ * Auth to apply when the spec models none of its own. Kept to the shapes the emitters already
+ * generate handlers for; anything a spec *does* declare wins over this.
+ */
+const authSchema = z
+  .discriminatedUnion("type", [
+    z.object({
+      type: z.literal("apiKey"),
+      in: z.enum(["header", "query", "cookie"]).optional(),
+      name: z.string().optional().describe('Parameter name; defaults to "X-API-Key".'),
+    }),
+    z.object({ type: z.literal("http"), scheme: z.enum(["bearer", "basic"]) }),
+    z.object({
+      type: z.literal("oauth2"),
+      tokenUrl: z.string(),
+      grant: z.enum(["client_credentials", "refresh_token"]).optional(),
+    }),
+  ])
+  .optional()
+  .describe(
+    "Auth to use when the spec declares no security schemes of its own. Applied only to " +
+      "operations whose own security list is empty; credentials are read from env vars as usual.",
+  );
 
 const filterShape = {
   includeTags: z.array(z.string()).optional().describe("Keep only operations with these tags."),
@@ -172,6 +197,7 @@ export function registerTools(server: McpServer): void {
             "Also write tool-catalog.json (name/summary/tags per tool) for discovery layers.",
           ),
         force: z.boolean().optional().describe("Overwrite a non-empty / existing project."),
+        auth: authSchema,
         ...filterShape,
       },
     },
@@ -186,6 +212,7 @@ export function registerTools(server: McpServer): void {
         transport: args.transport as "stdio" | "http" | "both" | undefined,
         toolCatalog: args.toolCatalog as boolean | undefined,
         force: args.force as boolean | undefined,
+        auth: args.auth as AuthOverride | undefined,
         filters: filtersFrom(args),
       });
       return text(summaryText("Generated", summary));
@@ -211,6 +238,7 @@ export function registerTools(server: McpServer): void {
             "Also write tool-catalog.json; defaults to refreshing it if the project has one.",
           ),
         force: z.boolean().optional().describe("Overwrite existing tool files of the same name."),
+        auth: authSchema,
         ...filterShape,
       },
     },
@@ -220,6 +248,7 @@ export function registerTools(server: McpServer): void {
         projectDir: args.projectDir as string,
         toolCatalog: args.toolCatalog as boolean | undefined,
         force: args.force as boolean | undefined,
+        auth: args.auth as AuthOverride | undefined,
         filters: filtersFrom(args),
       });
       return text(summaryText("Extended", summary));
@@ -254,6 +283,10 @@ export function registerTools(server: McpServer): void {
           "oauth2 (client-credentials grant, refresh-token grant, or pre-obtained token)",
         ],
         curation: ["includeTags", "excludeOperations", "methods", "pathGlob"],
+        authOverride:
+          "generate/extend accept an `auth` argument for specs that declare no security of " +
+          "their own ({type:apiKey,in,name} | {type:http,scheme} | {type:oauth2,tokenUrl,grant}); " +
+          "it applies only to operations whose own security list is empty.",
         toolCatalog:
           "Optional machine-readable tool-catalog.json (toolCatalog flag on generate/extend, or `serve --catalog <path>`) so discovery layers can rank tools.",
         append: true,

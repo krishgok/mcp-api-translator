@@ -12,7 +12,12 @@ import { buildDescription } from "../curation/describe.js";
 import { curate, TOOL_COUNT_WARN_THRESHOLD } from "../curation/index.js";
 import { applyFilters, type FilterOptions } from "../curation/filter.js";
 import { uniqueToolName } from "../curation/naming.js";
-import { assignEnvVars, envNamespace } from "../parsers/security.js";
+import {
+  applyAuthOverride,
+  assignEnvVars,
+  envNamespace,
+  type AuthOverride,
+} from "../parsers/security.js";
 import {
   operationKey,
   readManifest,
@@ -43,12 +48,19 @@ export interface GenerateOptions {
   pythonVariant?: PythonVariant;
   /** Also write a machine-readable tool-catalog.json for discovery layers. */
   toolCatalog?: boolean;
+  /**
+   * Auth to apply when the spec declares none of its own. Attaches only to operations whose own
+   * security list is empty; operations that do declare security keep it.
+   */
+  auth?: AuthOverride;
 }
 
 export interface AppendOptions {
   projectDir: string;
   filters?: FilterOptions;
   force?: boolean;
+  /** Auth for the appended spec, when it declares none. See {@link GenerateOptions.auth}. */
+  auth?: AuthOverride;
   /**
    * Also write/refresh tool-catalog.json. Defaults to refreshing it when the project already has
    * one, so a catalog-enabled project stays current across appends.
@@ -342,9 +354,10 @@ async function emitPythonShared(
 }
 
 export async function generateProject(
-  model: ApiModel,
+  sourceModel: ApiModel,
   options: GenerateOptions,
 ): Promise<EmitSummary> {
+  const model = options.auth ? applyAuthOverride(sourceModel, options.auth) : sourceModel;
   const dir = path.resolve(options.outputDir);
   const existingManifest = await readManifest(dir);
   if (existingManifest && !options.force) {
@@ -450,7 +463,7 @@ export async function generateProject(
 }
 
 export async function appendToProject(
-  model: ApiModel,
+  sourceModel: ApiModel,
   options: AppendOptions,
 ): Promise<EmitSummary> {
   const dir = path.resolve(options.projectDir);
@@ -467,6 +480,17 @@ export async function appendToProject(
     );
   }
   const language: Language = manifest.language ?? "typescript";
+
+  // Applied after the manifest is read so the synthesized scheme name can't collide with one the
+  // project already holds — the merge below keeps the manifest's scheme on a name clash, which
+  // would otherwise silently point this API's operations at another API's credentials.
+  const model = options.auth
+    ? applyAuthOverride(
+        sourceModel,
+        options.auth,
+        manifest.securitySchemes.map((s) => s.name),
+      )
+    : sourceModel;
 
   // Merge servers and security schemes.
   const servers = [...new Set([...manifest.servers, ...model.servers])];

@@ -434,6 +434,70 @@ describe("missing-auth warning", () => {
     );
   });
 
+  it("is silenced by an auth override, which wires credentials into the generated project", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "mcpgen-"));
+    const model = await parseSource({ spec: JSON.stringify(noAuthSpec), format: "openapi" });
+    const summary = await generateProject(model, {
+      outputDir: dir,
+      auth: { type: "http", scheme: "bearer" },
+    });
+
+    expect(summary.warnings.some((w) => w.includes("No security schemes are declared"))).toBe(
+      false,
+    );
+    // bearer -> API_TOKEN, and the operation now requires the synthesized scheme
+    expect(await read(dir, ".env.example")).toContain("API_TOKEN");
+    expect(await read(dir, "src/auth.ts")).toContain("authOverride");
+    expect(await read(dir, "src/tools/ping.ts")).toContain("authOverride");
+  });
+
+  it("leaves operations that declare their own security alone", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "mcpgen-"));
+    // petstore's operations all inherit the root apiKey requirement.
+    const model = await parseSource({ specPath: `${fixtures}/petstore.openapi.yaml` });
+    const summary = await generateProject(model, {
+      outputDir: dir,
+      auth: { type: "http", scheme: "bearer" },
+    });
+
+    expect(summary.toolsAdded).toBe(3);
+    // the declared scheme keeps its friendly slot; the unused override is namespaced off it
+    const env = await read(dir, ".env.example");
+    expect(env).toContain("API_KEY");
+    const tool = await read(dir, "src/tools/listPets.ts");
+    expect(tool).toContain("apiKey");
+    expect(tool).not.toContain("authOverride");
+  });
+
+  it("does not let an override collide with a scheme the project already has", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "mcpgen-"));
+    const first = await parseSource({ spec: JSON.stringify(noAuthSpec), format: "openapi" });
+    await generateProject(first, {
+      outputDir: dir,
+      serverName: "agg-mcp",
+      auth: { type: "http", scheme: "bearer" },
+    });
+
+    const second = await parseSource({
+      spec: JSON.stringify({
+        ...noAuthSpec,
+        info: { title: "Second API", version: "1.0.0" },
+        paths: {
+          "/pong": { get: { operationId: "pong", responses: { "200": { description: "ok" } } } },
+        },
+      }),
+      format: "openapi",
+    });
+    await appendToProject(second, { projectDir: dir, auth: { type: "apiKey" } });
+
+    const manifest = await readManifest(dir);
+    const names = manifest!.securitySchemes.map((s) => s.name);
+    // two distinct overrides, not one silently shared
+    expect(names).toEqual(["authOverride", "authOverride2"]);
+    expect(new Set(manifest!.securitySchemes.flatMap((s) => s.envVars)).size).toBe(2);
+    expect(await read(dir, "src/tools/pong.ts")).toContain("authOverride2");
+  });
+
   it("stays quiet on append when another source already contributed a scheme", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "mcpgen-"));
     // petstore declares an apiKey scheme; the appended spec declares none.
