@@ -242,6 +242,39 @@ For a client-credentials scheme, the server exchanges the id+secret for a bearer
 `API_REFRESH_TOKEN` (client secret optional for public clients); a plain bearer in `API_TOKEN` still
 works as a fallback. (Multiple schemes that would collide get namespaced by scheme name.)
 
+### When the spec declares no auth
+
+Some real-world specs model no security at all — the GitHub Enterprise Server description is one —
+even though the API very much requires a token. `analyze_spec` reports `authSchemes: []` and both
+`analyze_spec` and `generate_mcp_server` warn that the generated server would send unauthenticated
+requests.
+
+Pass `auth` to `generate_mcp_server` / `extend_mcp_server` to supply the scheme the spec omits:
+
+```jsonc
+{
+  "specPath": "./ghes-3.9.yaml",
+  "outputDir": "./ghes-mcp",
+  "includeTags": ["repos"],
+  "auth": { "type": "http", "scheme": "bearer" },
+}
+```
+
+Accepted shapes, mapping onto the same env vars as the table above:
+
+| `auth`                                                      | Generated env var(s)               |
+| ----------------------------------------------------------- | ---------------------------------- |
+| `{ "type": "apiKey", "in": "header", "name": "X-API-Key" }` | `API_KEY`                          |
+| `{ "type": "http", "scheme": "bearer" }`                    | `API_TOKEN`                        |
+| `{ "type": "http", "scheme": "basic" }`                     | `API_USERNAME`, `API_PASSWORD`     |
+| `{ "type": "oauth2", "tokenUrl": "...", "grant": "..." }`   | as per the client-credentials rows |
+
+`in` defaults to `header` and `name` to `X-API-Key`; `grant` defaults to `client_credentials`.
+
+The override applies **only to operations whose own security list is empty** — an operation the spec
+does describe auth for keeps what it declares, since the spec knows something the override does not.
+It is therefore safe to pass against a partially-annotated spec.
+
 > **Trust note:** a generated server calls whatever base URL the spec declares and sends your
 > credentials there. If the spec came from an untrusted source, review `config.ts` / `auth.ts` and
 > set `API_BASE_URL` explicitly before using real secrets. See the README's _Security & trust
@@ -431,7 +464,7 @@ time if you're unsure what's supported.
 
 - **Inputs:** OpenAPI 3.0/3.1 and Postman v2.1 (Swagger 2.0 best-effort). No GraphQL/gRPC yet.
 - **Auth:** API key / bearer / basic / pre-obtained OAuth token, all from env. No interactive OAuth
-  flows or token refresh.
+  flows or token refresh. A spec that declares no security warns, and `auth` supplies one.
 - **Responses:** returned as JSON/text; no upstream streaming or automatic pagination.
 - **Output quality tracks spec quality** — good `operationId`s and descriptions yield better tool
   names and docs. Curation helps; it can't invent semantics.
