@@ -72,6 +72,50 @@ describe("OpenAPI parser", () => {
     ]);
   });
 
+  it("does not blow the stack on a self-referential schema", async () => {
+    // Specs are dereferenced before normalization, so a self-$ref (Gmail's MessagePart.parts[]
+    // -> MessagePart is the real-world case) arrives as a cyclic object graph.
+    const spec = {
+      openapi: "3.0.3",
+      info: { title: "Recursive", version: "1.0.0" },
+      servers: [{ url: "https://api.example.com" }],
+      paths: {
+        "/parts": {
+          post: {
+            operationId: "createPart",
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": { schema: { $ref: "#/components/schemas/Part" } },
+              },
+            },
+            responses: { "200": { description: "ok" } },
+          },
+        },
+      },
+      components: {
+        schemas: {
+          Part: {
+            type: "object",
+            properties: {
+              filename: { type: "string" },
+              parts: { type: "array", items: { $ref: "#/components/schemas/Part" } },
+            },
+          },
+        },
+      },
+    };
+
+    const model = await parseSource({ spec: JSON.stringify(spec), format: "openapi" });
+    const body = model.operations[0]!.requestBody!.schema as any;
+
+    expect(body.properties.filename.type).toBe("string");
+    // the cycle is cut, keeping the declared type as a hint
+    expect(body.properties.parts.items).toEqual({ type: "object" });
+    // and the result must be serializable -- generated tool files embed it via JSON.stringify
+    expect(() => JSON.stringify(body)).not.toThrow();
+  });
+
   it("prefers client_credentials when a scheme declares several flows", async () => {
     const spec = {
       openapi: "3.0.0",

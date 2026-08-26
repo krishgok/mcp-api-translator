@@ -23,9 +23,32 @@ type AnyObj = Record<string, any>;
 
 const HTTP_METHODS = ["get", "put", "post", "delete", "patch", "options", "head", "trace"];
 
-/** Recursively convert OpenAPI 3.0 `nullable` into a JSON Schema 2020-12 type union. */
-function normalizeSchema(schema: any, isV30: boolean): JsonSchema {
+/**
+ * Recursively convert OpenAPI 3.0 `nullable` into a JSON Schema 2020-12 type union.
+ *
+ * `seen` holds the schema objects on the current recursion path. Specs are dereferenced before
+ * they reach us, so a self-referential definition (Gmail's `MessagePart.parts[]` -> `MessagePart`
+ * is the canonical example) arrives as a genuinely cyclic object graph, which would otherwise
+ * recurse until the stack overflows. Recursion is cut at the point the cycle closes, keeping the
+ * result finite and JSON-serializable -- generated tool files embed it via JSON.stringify, which
+ * would itself throw on a cyclic value. The cut keeps a plain `type` when the node declares one,
+ * so the shape is still hinted rather than erased.
+ */
+function normalizeSchema(schema: any, isV30: boolean, seen: Set<object> = new Set()): JsonSchema {
   if (!schema || typeof schema !== "object") return schema ?? {};
+  if (seen.has(schema)) return typeof schema.type === "string" ? { type: schema.type } : {};
+
+  seen.add(schema);
+  try {
+    return normalizeNode(schema, isV30, seen);
+  } finally {
+    // Path-based, not global: the same subschema reached down two sibling branches is normalized
+    // in both. Only an actual cycle is cut.
+    seen.delete(schema);
+  }
+}
+
+function normalizeNode(schema: any, isV30: boolean, seen: Set<object>): JsonSchema {
   const out: AnyObj = Array.isArray(schema) ? [...schema] : { ...schema };
 
   if (isV30 && out.nullable === true) {
@@ -39,15 +62,17 @@ function normalizeSchema(schema: any, isV30: boolean): JsonSchema {
 
   if (out.properties && typeof out.properties === "object") {
     const props: AnyObj = {};
-    for (const [k, v] of Object.entries(out.properties)) props[k] = normalizeSchema(v, isV30);
+    for (const [k, v] of Object.entries(out.properties)) props[k] = normalizeSchema(v, isV30, seen);
     out.properties = props;
   }
-  if (out.items) out.items = normalizeSchema(out.items, isV30);
+  if (out.items) out.items = normalizeSchema(out.items, isV30, seen);
   if (out.additionalProperties && typeof out.additionalProperties === "object") {
-    out.additionalProperties = normalizeSchema(out.additionalProperties, isV30);
+    out.additionalProperties = normalizeSchema(out.additionalProperties, isV30, seen);
   }
   for (const key of ["allOf", "anyOf", "oneOf"]) {
-    if (Array.isArray(out[key])) out[key] = out[key].map((s: any) => normalizeSchema(s, isV30));
+    if (Array.isArray(out[key])) {
+      out[key] = out[key].map((s: any) => normalizeSchema(s, isV30, seen));
+    }
   }
   return out;
 }
