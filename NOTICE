@@ -17,3 +17,19 @@ the LICENSE file.
 licenses grant rights to use, modify, and distribute the software; they do not
 grant rights to use the project name to endorse or promote derivative works
 without prior written permission.
+
+THIRD-PARTY NAMES AND TRADEMARKS
+
+Product names referenced in this project's documentation and demo material —
+including Firecrawl, Gmail, Google, GitHub, Stripe, Claude, Cursor, Cline,
+Continue.dev, Docker, npm, Postman, OpenAPI and Model Context Protocol — are
+the trademarks or registered trademarks of their respective owners. They are
+used here solely to identify the products and API descriptions this software
+interoperates with, which is nominative use.
+
+No affiliation with, sponsorship by, or endorsement from any of those owners is
+claimed or implied. Third-party repositories, URLs and API responses shown in
+demo material are illustrative examples and do not indicate any relationship
+with, or approval by, their authors or operators.
+
+No third-party API description is redistributed as part of this project.
