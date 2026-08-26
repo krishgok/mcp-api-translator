@@ -25,6 +25,23 @@ same commands you can run locally. A separate DCO check runs on pull requests.
   `check:docs` CI job asserts that documented tool names still exist.
 - Follow the existing code style (Prettier config is in `.prettierrc.json`).
 
+### Test fixtures and third-party specs
+
+Fixtures under `test/fixtures/` are hand-written. **Do not commit a third-party
+API description unless it is permissively licensed** (MIT, Apache-2.0, BSD,
+CC0, public domain).
+
+This is a licensing constraint, not a preference. `mcp-api-translator` is
+dual-licensed (AGPL **and** commercial — see [LICENSING.md](LICENSING.md)), and
+third-party content under a copyleft licence cannot be sub-licensed under the
+commercial terms. Committing, say, an AGPL-licensed vendor spec as a fixture
+would compromise the commercial option for the whole project.
+
+Real-world specs are still fine to test against **locally** — point `specPath`
+at a downloaded copy. Only committing them is restricted. If a real spec
+exposes a bug, distil it into a minimal hand-written fixture that reproduces
+the same shape, as `server-vars.openapi.yaml` does for server variables.
+
 ## Contributor License Agreement (CLA)
 
 This project is **dual-licensed** — AGPL-3.0 **and** a separate commercial license

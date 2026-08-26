@@ -13,7 +13,9 @@ server for that API.
 ![Curate a spec, aggregate a second one, run the generated server, and let an agent call it](docs/demo.gif)
 
 _Above: curating Firecrawl's 20 operations down to 6, appending the Gmail API to the same server,
-then an agent calling the self-hosted result to search GitHub "awesome" lists and email the digest._
+then an agent calling the self-hosted result. Counts, tool names and paths come from real runs
+against the published Firecrawl and Gmail descriptions; the API responses are illustrative — the
+recording runs against a local stub, not live Firecrawl or Gmail accounts._
 
 ## Why this and not a 1:1 generator
 
