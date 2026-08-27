@@ -7,8 +7,9 @@
  * Runs over stdio by default; `--transport http` serves stateless Streamable HTTP at /mcp (for
  * containers / hosted deploys — see docs/deploy-serve.md). Filters mirror the curation options:
  * --include-tag, --methods, --path-glob, --exclude (repeat --spec / --include-tag / --exclude to
- * pass several). No files are written unless --catalog <path> is set, which writes a
- * machine-readable tool catalog at startup.
+ * pass several). --auth supplies a scheme for specs that declare none of their own, mirroring the
+ * `auth` argument on generate/extend. No files are written unless --catalog <path> is set, which
+ * writes a machine-readable tool catalog at startup.
  */
 import { randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
@@ -16,6 +17,7 @@ import { createServer as createHttpServer } from "node:http";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { parseSource } from "../parsers/index.js";
+import { applyAuthOverride, type AuthOverride } from "../parsers/security.js";
 import type { FilterOptions } from "../curation/filter.js";
 import { buildCatalog } from "../emitters/catalog.js";
 import { log, setLevel, type LogLevel } from "./logger.js";
@@ -32,6 +34,53 @@ interface ServeArgs {
   port?: number;
   /** Log threshold; overrides the LOG_LEVEL env var. */
   logLevel?: LogLevel;
+  /** Auth to apply to specs that declare none of their own. */
+  auth?: AuthOverride;
+}
+
+/**
+ * Parse `--auth`, the CLI spelling of the `auth` override that generate/extend take as an object.
+ * Colon-separated so it stays a single shell token:
+ *
+ *   bearer | basic | apikey | apikey:<in>:<name> | oauth2:<tokenUrl>[:<grant>]
+ */
+export function parseAuthFlag(value: string): AuthOverride {
+  const [kind, ...rest] = value.split(":");
+  switch (kind) {
+    case "bearer":
+      return { type: "http", scheme: "bearer" };
+    case "basic":
+      return { type: "http", scheme: "basic" };
+    case "apikey": {
+      const [rawLocation, name] = rest;
+      let location: "header" | "query" | "cookie" | undefined;
+      if (rawLocation) {
+        if (rawLocation !== "header" && rawLocation !== "query" && rawLocation !== "cookie") {
+          throw new Error(
+            `--auth apikey location must be header, query, or cookie (got "${rawLocation}")`,
+          );
+        }
+        location = rawLocation;
+      }
+      return {
+        type: "apiKey",
+        ...(location ? { in: location } : {}),
+        ...(name ? { name } : {}),
+      };
+    }
+    case "oauth2": {
+      // The token URL contains "://", so rejoin everything except a trailing grant.
+      const grant = rest[rest.length - 1];
+      const hasGrant = grant === "client_credentials" || grant === "refresh_token";
+      const tokenUrl = (hasGrant ? rest.slice(0, -1) : rest).join(":");
+      if (!tokenUrl) throw new Error("--auth oauth2 requires a token URL: oauth2:<tokenUrl>");
+      return { type: "oauth2", tokenUrl, ...(hasGrant ? { grant } : {}) };
+    }
+    default:
+      throw new Error(
+        `--auth must be bearer, basic, apikey[:<in>:<name>], or oauth2:<tokenUrl> (got "${value}")`,
+      );
+  }
 }
 
 /** Parse `serve` argv (everything after the `serve` subcommand). */
@@ -46,6 +95,7 @@ export function parseServeArgs(argv: string[]): ServeArgs {
   let transport: ServeArgs["transport"] = "stdio";
   let port: number | undefined;
   let logLevel: LogLevel | undefined;
+  let auth: AuthOverride | undefined;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -107,6 +157,9 @@ export function parseServeArgs(argv: string[]): ServeArgs {
         format = f;
         break;
       }
+      case "--auth":
+        auth = parseAuthFlag(next());
+        break;
       default:
         throw new Error(`Unknown serve option: ${arg}`);
     }
@@ -125,17 +178,20 @@ export function parseServeArgs(argv: string[]): ServeArgs {
     throw new Error("--port requires --transport http.");
   }
 
-  return { specs, format, filters, catalogPath, transport, port, logLevel };
+  return { specs, format, filters, catalogPath, transport, port, logLevel, auth };
 }
 
 /** Mount every requested spec and serve them live (stdio by default, or Streamable HTTP). */
 export async function runServe(argv: string[]): Promise<void> {
-  const { specs, format, filters, catalogPath, transport, port, logLevel } = parseServeArgs(argv);
+  const { specs, format, filters, catalogPath, transport, port, logLevel, auth } =
+    parseServeArgs(argv);
   if (logLevel) setLevel(logLevel);
   const proxy = new ApiProxy();
 
   for (const specPath of specs) {
-    const model = await parseSource({ specPath, format });
+    const parsed = await parseSource({ specPath, format });
+    // Same rule as generate/extend: attaches only to operations with no security of their own.
+    const model = auth ? applyAuthOverride(parsed, auth) : parsed;
     const result = proxy.mount(model, filters);
     log.info(`mounted ${result.mounted} tool(s) from "${model.title}" (${specPath})`, {
       api: model.title,
