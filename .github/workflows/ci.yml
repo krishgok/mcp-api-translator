@@ -55,6 +55,11 @@ jobs:
         run: |
           npm install
           npx tsc
+      - name: Typecheck the generated auth-override project
+        working-directory: build/e2e-out-auth-override
+        run: |
+          npm install
+          npx tsc
       - name: Generate & compile the Python project(s)
         run: npm run e2e:python
       - name: Smoke-test the generated FastMCP variant (in-memory client)
