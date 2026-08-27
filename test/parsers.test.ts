@@ -72,7 +72,11 @@ describe("OpenAPI parser", () => {
     ]);
 
     // only the first server's variables are recorded — that URL is the one that becomes the
-    // generated project's default API_BASE_URL, so it is the one worth reporting
+    // generated project's default API_BASE_URL, so it is the one worth reporting.
+    //
+    // protocol resolves to http rather than https because that is what the fixture declares,
+    // mirroring the real GitHub Enterprise Server description. The parser must not second-guess
+    // a declared default; the enum below is what tells the reader https is also allowed.
     expect(model.serverVariables).toEqual({
       protocol: { default: "http", enum: ["http", "https"] },
       hostname: { default: "HOSTNAME" },

@@ -4,6 +4,12 @@ info:
   version: 1.0.0
 servers:
   # Every placeholder has a declared default (as OpenAPI requires).
+  #
+  # `protocol` defaults to http, not https, deliberately: this mirrors the real GitHub Enterprise
+  # Server description, which is the spec that motivated substitution in the first place. It also
+  # makes the test stronger — with an https default, a bug that hard-coded "https" would still
+  # pass. The parser must use whatever the spec declares, however unwise that default is, and the
+  # emitted .env.example surfaces the enum so the reader can see https is permitted.
   - url: "{protocol}://{hostname}/api/v3"
     variables:
       hostname:
