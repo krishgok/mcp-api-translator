@@ -143,10 +143,11 @@ generate_mcp_server({ specPath: "./petstore.yaml", outputDir: "./petstore-mcp" }
 **3. Aggregate** — add more APIs to the same server:
 
 ```js
+// any second API — the sources don't have to share a format or a vendor
 extend_mcp_server({
   projectDir: "./petstore-mcp",
-  specPath: "./github.yaml",
-  includeTags: ["issues"],
+  specPath: "./billing.postman.json",
+  includeTags: ["invoices"],
 });
 // idempotent; hand-edited tool files are preserved
 ```
