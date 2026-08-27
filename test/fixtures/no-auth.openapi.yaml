@@ -1,0 +1,31 @@
+# A spec that models no security at all — the shape that warns, and that the `auth` override
+# exists to fix. Real-world examples include the GitHub Enterprise Server description.
+openapi: 3.0.3
+info:
+  title: No Auth API
+  version: 1.0.0
+servers:
+  - url: https://api.example.com/v1
+paths:
+  /widgets:
+    get:
+      operationId: listWidgets
+      summary: List widgets
+      tags: [widgets]
+      responses:
+        "200":
+          description: ok
+  /widgets/{widgetId}:
+    get:
+      operationId: getWidget
+      summary: Get a widget by id
+      tags: [widgets]
+      parameters:
+        - name: widgetId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ok

@@ -37,4 +37,20 @@ const refresh = await parseSource({ specPath: `${fixtures}/oauth-refresh.openapi
 await generateProject(refresh, { outputDir: refreshOut, serverName: "e2e-oauth-refresh-mcp" });
 console.log(`generated oauth-refresh project at ${refreshOut}`);
 
+// And a project whose auth comes from the `auth` override rather than the spec, so CI compiles
+// the synthesized-scheme path too. petstore.openapi.yaml declares apiKey on every operation, so
+// this uses a deliberately auth-less spec: the override has to be what wires credentials up.
+const overrideOut = `${out}-auth-override`;
+await rm(overrideOut, { recursive: true, force: true });
+const noAuth = await parseSource({ specPath: `${fixtures}/no-auth.openapi.yaml` });
+const overrideSummary = await generateProject(noAuth, {
+  outputDir: overrideOut,
+  serverName: "e2e-auth-override-mcp",
+  auth: { type: "oauth2", tokenUrl: "https://id.example.com/token" },
+});
+if (overrideSummary.warnings.some((w) => w.includes("No security schemes are declared"))) {
+  throw new Error("auth override did not silence the missing-auth warning");
+}
+console.log(`generated auth-override project at ${overrideOut}`);
+
 console.log(`OUTPUT_DIR=${out}`);

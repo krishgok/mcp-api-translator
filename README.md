@@ -122,22 +122,21 @@ You don't call the tools by hand — you ask your agent, and it drives them.
 
 **1. Preview, then curate.** See what a spec becomes before writing anything:
 
-> _"Analyze ./firecrawl.json and show me the proposed tools."_
-> _"Just the search and scraping ones."_
+> _"Analyze ./petstore.yaml and show me the proposed tools."_
+> _"Only the GET endpoints under /pets."_
 
 ```js
-analyze_spec({ specPath: "./firecrawl.json", includeTags: ["Search", "Scraping"] });
-// → 20 operations, 6 kept — plus the auth scheme and env vars the server will need
+analyze_spec({ specPath: "./petstore.yaml" });
+// → proposed tool list, auth scheme, and the env vars the server will need
+
+analyze_spec({ specPath: "./petstore.yaml", methods: ["GET"], pathGlob: "/pets/**" });
+// also: includeTags: ["pets"], excludeOperations: ["deletePet"]
 ```
 
 **2. Generate**, with the same filters plus an output directory:
 
 ```js
-generate_mcp_server({
-  specPath: "./firecrawl.json",
-  outputDir: "./blog-digest-mcp",
-  includeTags: ["Search", "Scraping"],
-});
+generate_mcp_server({ specPath: "./petstore.yaml", outputDir: "./petstore-mcp" });
 // options: language: "python", transport: "http", auth: {...}, force: true
 ```
 
@@ -145,17 +144,21 @@ generate_mcp_server({
 
 ```js
 extend_mcp_server({
-  projectDir: "./blog-digest-mcp",
-  specPath: "./gmail.yaml",
-  pathGlob: "/gmail/v1/users/*/messages**",
+  projectDir: "./petstore-mcp",
+  specPath: "./github.yaml",
+  includeTags: ["issues"],
 });
 // idempotent; hand-edited tool files are preserved
 ```
 
+Aggregated APIs don't share credentials: each also reads namespaced env vars
+(`<NAMESPACE>_API_BASE_URL`, `<NAMESPACE>_API_KEY`, … — namespace derived from the API title)
+before falling back to the bare ones. The extend summary and `.env.example` list the exact names.
+
 **4. Run it.** The output is a normal project you own:
 
 ```bash
-cd blog-digest-mcp && npm install && npm run build
+cd petstore-mcp && npm install && npm run build
 cp .env.example .env   # set API_BASE_URL + credentials (never embedded in code)
 npm start
 ```
