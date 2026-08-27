@@ -79,12 +79,26 @@ export interface Operation {
   security: string[];
 }
 
+/** An OpenAPI `servers[].variables` entry, as declared by the spec. */
+export interface ServerVariable {
+  /** OpenAPI requires this, and it is what gets substituted into the URL. */
+  default: string;
+  /** Other values the spec permits, when it constrains them. */
+  enum?: string[];
+}
+
 export interface ApiModel {
   title: string;
   version: string;
   description?: string;
   /** Base URLs declared by the source (first is used as the default). */
   servers: string[];
+  /**
+   * Variables substituted into `servers[0]`, when the spec templated its base URL. Present only
+   * if a placeholder was actually replaced, so a non-empty value means the default base URL is a
+   * spec-supplied placeholder rather than a real host.
+   */
+  serverVariables?: Record<string, ServerVariable>;
   securitySchemes: SecurityScheme[];
   operations: Operation[];
   sourceFormat: SourceFormat;

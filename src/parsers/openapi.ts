@@ -14,6 +14,7 @@ import type {
   ParameterLocation,
   RequestBody,
   SecuritySchemeType,
+  ServerVariable,
 } from "../ir/model.js";
 import { nameFromMethodPath, sanitizeToolName } from "../curation/naming.js";
 import { assignEnvVars } from "./security.js";
@@ -82,27 +83,53 @@ function normalizeNode(schema: any, isV30: boolean, seen: Set<object>): JsonSche
  * OpenAPI requires a `default` on every server variable, so this is well-defined; a placeholder
  * with no usable default is left alone rather than silently blanked, keeping the gap visible.
  */
-function applyServerVariables(url: string, variables: unknown): string {
+function applyServerVariables(
+  url: string,
+  variables: unknown,
+  /** Collects the variables actually substituted, so callers can report them. */
+  used?: Record<string, ServerVariable>,
+): string {
   if (!variables || typeof variables !== "object") return url;
   const vars = variables as Record<string, AnyObj | undefined>;
   return url.replace(/\{([^{}]+)\}/g, (placeholder, name: string) => {
-    const value = vars[name]?.default;
-    return value === undefined || value === null ? placeholder : String(value);
+    const declared = vars[name];
+    const value = declared?.default;
+    if (value === undefined || value === null) return placeholder;
+    if (used) {
+      used[name] = {
+        default: String(value),
+        ...(Array.isArray(declared?.enum) && declared.enum.length > 0
+          ? { enum: declared.enum.map(String) }
+          : {}),
+      };
+    }
+    return String(value);
   });
 }
 
-function serversFrom(doc: AnyObj): string[] {
+interface ParsedServers {
+  urls: string[];
+  /** Only the variables substituted into the *first* URL — that is the one that becomes the
+   * generated project's default `API_BASE_URL`, so it is the one worth warning about. */
+  variables?: Record<string, ServerVariable>;
+}
+
+function serversFrom(doc: AnyObj): ParsedServers {
   if (Array.isArray(doc.servers) && doc.servers.length > 0) {
-    return doc.servers
-      .map((s: AnyObj) => applyServerVariables(String(s.url), s.variables))
+    const firstVars: Record<string, ServerVariable> = {};
+    const urls = doc.servers
+      .map((s: AnyObj, i: number) =>
+        applyServerVariables(String(s.url), s.variables, i === 0 ? firstVars : undefined),
+      )
       .filter(Boolean);
+    return Object.keys(firstVars).length > 0 ? { urls, variables: firstVars } : { urls };
   }
   // Swagger 2.0 fallback.
   if (doc.host) {
     const scheme = Array.isArray(doc.schemes) && doc.schemes.length > 0 ? doc.schemes[0] : "https";
-    return [`${scheme}://${doc.host}${doc.basePath ?? ""}`];
+    return { urls: [`${scheme}://${doc.host}${doc.basePath ?? ""}`] };
   }
-  return [];
+  return { urls: [] };
 }
 
 function paramFrom(p: AnyObj, isV30: boolean): Parameter {
@@ -254,11 +281,14 @@ export async function parseOpenApi(raw: unknown): Promise<ApiModel> {
     }
   }
 
+  const servers = serversFrom(doc);
+
   return {
     title: doc.info?.title ?? "API",
     version: doc.info?.version ?? "0.0.0",
     description: doc.info?.description,
-    servers: serversFrom(doc),
+    servers: servers.urls,
+    ...(servers.variables ? { serverVariables: servers.variables } : {}),
     securitySchemes,
     operations,
     sourceFormat: "openapi",

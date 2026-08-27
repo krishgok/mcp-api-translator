@@ -70,6 +70,22 @@ describe("OpenAPI parser", () => {
       // no variables block: untouched
       "https://static.example.com/v1",
     ]);
+
+    // only the first server's variables are recorded — that URL is the one that becomes the
+    // generated project's default API_BASE_URL, so it is the one worth reporting.
+    //
+    // protocol resolves to http rather than https because that is what the fixture declares,
+    // mirroring the real GitHub Enterprise Server description. The parser must not second-guess
+    // a declared default; the enum below is what tells the reader https is also allowed.
+    expect(model.serverVariables).toEqual({
+      protocol: { default: "http", enum: ["http", "https"] },
+      hostname: { default: "HOSTNAME" },
+    });
+  });
+
+  it("records no server variables when the URL is not templated", async () => {
+    const model = await parseSource({ specPath: `${fixtures}/petstore.openapi.yaml` });
+    expect(model.serverVariables).toBeUndefined();
   });
 
   it("does not blow the stack on a self-referential schema", async () => {

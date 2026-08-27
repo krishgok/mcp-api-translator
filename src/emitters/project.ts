@@ -7,7 +7,13 @@
  */
 import { mkdir, writeFile, readFile, readdir, access } from "node:fs/promises";
 import path from "node:path";
-import type { ApiModel, JsonSchema, Operation, SecurityScheme } from "../ir/model.js";
+import type {
+  ApiModel,
+  JsonSchema,
+  Operation,
+  SecurityScheme,
+  ServerVariable,
+} from "../ir/model.js";
 import { buildDescription } from "../curation/describe.js";
 import { curate, TOOL_COUNT_WARN_THRESHOLD } from "../curation/index.js";
 import { applyFilters, type FilterOptions } from "../curation/filter.js";
@@ -261,12 +267,13 @@ async function emitShared(
   transport: t.Transport,
   allToolNames: string[],
   toolCount: number,
+  serverVariables?: Record<string, ServerVariable>,
 ): Promise<void> {
   const baseUrl = servers[0] ?? "";
   await fw.write("package.json", t.packageJson(serverName, serverVersion, transport));
   await fw.write("tsconfig.json", t.tsconfigJson());
   await fw.write(".gitignore", t.gitignore());
-  await fw.write(".env.example", t.envExample(baseUrl, schemes, sources));
+  await fw.write(".env.example", t.envExample(baseUrl, schemes, sources, serverVariables));
   await fw.write("Dockerfile", t.dockerfile());
   await fw.write("server.json", t.serverJson(serverName, serverVersion, description));
   await fw.write("client-config.md", t.clientConfigMd(serverName));
@@ -326,12 +333,13 @@ async function emitPythonShared(
   sources: t.EmitSource[],
   variant: PythonVariant,
   toolCount: number,
+  serverVariables?: Record<string, ServerVariable>,
 ): Promise<void> {
   const baseUrl = servers[0] ?? "";
   const pkg = py.toPackageModule(serverName);
   await fw.write("pyproject.toml", py.pyprojectToml(serverName, serverVersion, pkg, variant));
   await fw.write(".gitignore", py.gitignorePy());
-  await fw.write(".env.example", t.envExample(baseUrl, schemes, sources));
+  await fw.write(".env.example", t.envExample(baseUrl, schemes, sources, serverVariables));
   await fw.write("Dockerfile", py.dockerfilePy(pkg));
   await fw.write("server.json", t.serverJson(serverName, serverVersion, description));
   await fw.write(
@@ -398,6 +406,7 @@ export async function generateProject(
       emitSources,
       pythonVariant,
       tools.length,
+      model.serverVariables,
     );
     await fw.write(
       pythonToolsJsonPath(serverName),
@@ -415,6 +424,7 @@ export async function generateProject(
       transport,
       tools.map((tool) => tool.name),
       tools.length,
+      model.serverVariables,
     );
     for (const tool of tools) {
       await fw.write(`src/tools/${tool.name}.ts`, t.toolFileTs(tool));
@@ -457,7 +467,11 @@ export async function generateProject(
     toolsSkipped: filteredOut,
     totalTools: tools.length,
     files: fw.written,
-    warnings: [...toolCountWarnings(tools.length), ...noAuthWarnings(model.securitySchemes)],
+    warnings: [
+      ...toolCountWarnings(tools.length),
+      ...noAuthWarnings(model.securitySchemes),
+      ...serverVariableWarnings(model),
+    ],
     sourceEnv: sourceEnvHints(emitSources),
   };
 }
@@ -548,6 +562,7 @@ export async function appendToProject(
       emitSources,
       manifest.pythonVariant ?? "lowlevel",
       allRecords.length,
+      model.serverVariables,
     );
     await fw.write(toolsJson, JSON.stringify(allRecords, null, 2) + "\n");
   } else {
@@ -562,6 +577,7 @@ export async function appendToProject(
       manifest.transport,
       allToolNames,
       allToolNames.length,
+      model.serverVariables,
     );
     for (const tool of newTools) {
       const wrote = await fw.writeIfAbsent(
@@ -610,7 +626,11 @@ export async function appendToProject(
     files: fw.written,
     // `schemes` is the merged set, so an appended API that declares no auth stays quiet as long as
     // the project already has a scheme from another source.
-    warnings: [...toolCountWarnings(allToolNames.length), ...noAuthWarnings(schemes)],
+    warnings: [
+      ...toolCountWarnings(allToolNames.length),
+      ...noAuthWarnings(schemes),
+      ...serverVariableWarnings(model),
+    ],
     sourceEnv: sourceEnvHints(emitSources),
   };
 }
@@ -642,6 +662,24 @@ function toolCountWarnings(count: number): string[] {
  * Enterprise Server description) model no security at all. Without this the generated server
  * builds and runs but is rejected by the upstream on every call, with nothing pointing at why.
  */
+/**
+ * A templated base URL resolves to the spec's own placeholder defaults (GitHub Enterprise's
+ * `{protocol}://{hostname}/api/v3` becomes `http://HOSTNAME/api/v3`), which is a valid URL but
+ * not a reachable host. Without this the substitution is invisible and the first failure is a
+ * connection error at call time.
+ */
+export function serverVariableWarnings(model: ApiModel): string[] {
+  const vars = model.serverVariables;
+  if (!vars || Object.keys(vars).length === 0) return [];
+  const names = Object.keys(vars)
+    .map((n) => `{${n}}`)
+    .join(", ");
+  return [
+    `The spec's base URL is templated (${names}); it resolved to "${model.servers[0] ?? ""}" ` +
+      `using the spec's declared defaults. Set API_BASE_URL to your real host.`,
+  ];
+}
+
 export function noAuthWarnings(schemes: SecurityScheme[]): string[] {
   if (schemes.length > 0) return [];
   return [
