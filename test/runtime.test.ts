@@ -514,6 +514,33 @@ describe("parseServeArgs", () => {
     );
   });
 
+  it("parses every --auth spelling", () => {
+    const auth = (v: string) => parseServeArgs(["--spec", "a.yaml", "--auth", v]).auth;
+
+    expect(parseServeArgs(["--spec", "a.yaml"]).auth).toBeUndefined();
+    expect(auth("bearer")).toEqual({ type: "http", scheme: "bearer" });
+    expect(auth("basic")).toEqual({ type: "http", scheme: "basic" });
+    expect(auth("apikey")).toEqual({ type: "apiKey" });
+    expect(auth("apikey:query:token")).toEqual({ type: "apiKey", in: "query", name: "token" });
+    // the token URL's own "://" must survive the colon split
+    expect(auth("oauth2:https://id.example.com/token")).toEqual({
+      type: "oauth2",
+      tokenUrl: "https://id.example.com/token",
+    });
+    expect(auth("oauth2:https://id.example.com/token:refresh_token")).toEqual({
+      type: "oauth2",
+      tokenUrl: "https://id.example.com/token",
+      grant: "refresh_token",
+    });
+  });
+
+  it("rejects an invalid --auth", () => {
+    const bad = (v: string) => () => parseServeArgs(["--spec", "a.yaml", "--auth", v]);
+    expect(bad("nope")).toThrow(/--auth must be/);
+    expect(bad("apikey:body:x")).toThrow(/location must be header, query, or cookie/);
+    expect(bad("oauth2")).toThrow(/requires a token URL/);
+  });
+
   it("requires at least one --spec", () => {
     expect(() => parseServeArgs([])).toThrow(/requires at least one --spec/);
   });

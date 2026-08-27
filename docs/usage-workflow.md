@@ -389,7 +389,25 @@ mcp-api-translator serve --spec ./petstore.yaml --transport http --port 3000
 
 # Write a machine-readable tool catalog (name/summary/tags) for discovery layers
 mcp-api-translator serve --spec ./petstore.yaml --catalog ./tool-catalog.json
+
+# Supply auth for a spec that declares none of its own (see "When the spec declares no auth")
+mcp-api-translator serve --spec ./ghes-3.9.yaml --auth bearer
 ```
+
+`--auth` is the CLI spelling of the `auth` argument on `generate_mcp_server` /
+`extend_mcp_server`, colon-separated so it stays one shell token:
+
+| `--auth` value                        | Equivalent object                                | Env var(s)                           |
+| ------------------------------------- | ------------------------------------------------ | ------------------------------------ |
+| `bearer`                              | `{ type: "http", scheme: "bearer" }`             | `API_TOKEN`                          |
+| `basic`                               | `{ type: "http", scheme: "basic" }`              | `API_USERNAME`, `API_PASSWORD`       |
+| `apikey`                              | `{ type: "apiKey" }` (header `X-API-Key`)        | `API_KEY`                            |
+| `apikey:query:token`                  | `{ type: "apiKey", in: "query", name: "token" }` | `API_KEY`                            |
+| `oauth2:https://id.example.com/token` | `{ type: "oauth2", tokenUrl: "..." }`            | `API_CLIENT_ID`, `API_CLIENT_SECRET` |
+
+Append `:refresh_token` to the `oauth2` form to select that grant. As with generate/extend, the
+override attaches **only to operations whose own security list is empty**, so it is safe against a
+partially-annotated spec.
 
 Point your MCP client at the proxy instead of a generated project:
 

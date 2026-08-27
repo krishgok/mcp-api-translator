@@ -273,7 +273,7 @@ export function registerTools(server: McpServer): void {
         modes: {
           generate: "Scaffold an ownable TypeScript MCP-server project (generate_mcp_server).",
           serve:
-            "Run a live runtime proxy, no codegen: `mcp-api-translator serve --spec <path>` mounts the spec's operations as MCP tools in-process (repeat --spec to aggregate multiple APIs).",
+            "Run a live runtime proxy, no codegen: `mcp-api-translator serve --spec <path>` mounts the spec's operations as MCP tools in-process (repeat --spec to aggregate multiple APIs; --auth supplies a scheme when the spec declares none).",
         },
         transports: ["stdio", "http", "both"],
         authSchemes: [
@@ -286,7 +286,8 @@ export function registerTools(server: McpServer): void {
         authOverride:
           "generate/extend accept an `auth` argument for specs that declare no security of " +
           "their own ({type:apiKey,in,name} | {type:http,scheme} | {type:oauth2,tokenUrl,grant}); " +
-          "it applies only to operations whose own security list is empty.",
+          "it applies only to operations whose own security list is empty. `serve` takes the same " +
+          "override as --auth bearer|basic|apikey[:<in>:<name>]|oauth2:<tokenUrl>.",
         toolCatalog:
           "Optional machine-readable tool-catalog.json (toolCatalog flag on generate/extend, or `serve --catalog <path>`) so discovery layers can rank tools.",
         append: true,
