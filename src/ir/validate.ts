@@ -38,6 +38,20 @@ export function validateApiModel(model: ApiModel): string[] {
     });
   }
 
+  if (model.serverVariables !== undefined) {
+    if (typeof model.serverVariables !== "object" || model.serverVariables === null) {
+      issues.push("serverVariables must be an object when present");
+    } else {
+      for (const [name, v] of Object.entries(model.serverVariables)) {
+        const at = `serverVariables.${name}`;
+        if (typeof v?.default !== "string") issues.push(`${at}.default must be a string`);
+        if (v?.enum !== undefined && !Array.isArray(v.enum)) {
+          issues.push(`${at}.enum must be an array when present`);
+        }
+      }
+    }
+  }
+
   if (!Array.isArray(model.securitySchemes)) {
     issues.push("securitySchemes must be an array");
   } else {

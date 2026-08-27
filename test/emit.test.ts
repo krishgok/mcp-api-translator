@@ -405,6 +405,33 @@ describe("hardening", () => {
   });
 });
 
+describe("templated base URL", () => {
+  it("warns and annotates .env.example when server variables were substituted", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "mcpgen-"));
+    const model = await parseSource({ specPath: `${fixtures}/server-vars.openapi.yaml` });
+    const summary = await generateProject(model, { outputDir: dir });
+
+    expect(summary.warnings.some((w) => w.includes("base URL is templated"))).toBe(true);
+    expect(summary.warnings.some((w) => w.includes("http://HOSTNAME/api/v3"))).toBe(true);
+
+    const env = await read(dir, ".env.example");
+    expect(env).toContain("API_BASE_URL=http://HOSTNAME/api/v3");
+    expect(env).toContain("the spec templated this URL");
+    // the declared enum is surfaced so the reader knows what else is permitted
+    expect(env).toContain("{protocol} -> http  (allowed: http, https)");
+    expect(env).toContain("{hostname} -> HOSTNAME");
+  });
+
+  it("stays quiet for a plain base URL", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "mcpgen-"));
+    const model = await parseSource({ specPath: `${fixtures}/petstore.openapi.yaml` });
+    const summary = await generateProject(model, { outputDir: dir });
+
+    expect(summary.warnings.some((w) => w.includes("base URL is templated"))).toBe(false);
+    expect(await read(dir, ".env.example")).not.toContain("the spec templated this URL");
+  });
+});
+
 describe("missing-auth warning", () => {
   const noAuthSpec = {
     openapi: "3.0.0",

@@ -5,7 +5,7 @@
  * these host-side templates don't have to escape nested backticks/`${}`. Multi-line docs (README,
  * client config) are built from arrays of lines for the same reason.
  */
-import type { JsonSchema, SecurityScheme } from "../ir/model.js";
+import type { JsonSchema, SecurityScheme, ServerVariable } from "../ir/model.js";
 import { GENERATOR_NAME, GENERATOR_VERSION } from "../version.js";
 
 export type Transport = "stdio" | "http" | "both";
@@ -764,9 +764,21 @@ export function envExample(
   baseUrl: string,
   schemes: SecurityScheme[],
   sources: EmitSource[] = [],
+  /** Variables the spec substituted into `baseUrl`, if it templated its server URL. */
+  serverVariables?: Record<string, ServerVariable>,
 ): string {
   const lines = ["# Environment for the generated MCP server.", ""];
   lines.push("# Base URL of the upstream API.");
+  if (serverVariables && Object.keys(serverVariables).length > 0) {
+    // The value below is assembled from the spec's own placeholder defaults, so it is almost
+    // certainly not a reachable host. Say which parts are placeholders, and what the spec allows.
+    lines.push("# NOTE: the spec templated this URL; the value below uses its declared defaults");
+    lines.push("#       and must be replaced with your real host.");
+    for (const [name, v] of Object.entries(serverVariables)) {
+      const alt = v.enum && v.enum.length > 0 ? `  (allowed: ${v.enum.join(", ")})` : "";
+      lines.push(`#       {${commentSafe(name)}} -> ${commentSafe(v.default)}${alt}`);
+    }
+  }
   lines.push(`API_BASE_URL=${baseUrl || "https://api.example.com"}`);
   if (schemes.length > 0) {
     lines.push("");
