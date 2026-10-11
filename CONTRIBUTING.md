@@ -110,9 +110,14 @@ git push --follow-tags            # triggers release.yml
 Pre-release tags (e.g. `v1.2.0-rc.1`) publish under the npm `next` dist-tag, so
 `npm install mcp-api-translator` keeps resolving to the last stable release. The
 workflow also pushes a multi-arch Docker image to GHCR, generates an SBOM, and
-creates a GitHub Release.
+creates a GitHub Release. Stable tags are also listed on the official
+[MCP Registry](https://registry.modelcontextprotocol.io) via GitHub OIDC (no secret).
 
 Notes:
+
+- `npm version` only bumps `package.json`. Before tagging, also bump
+  `GENERATOR_VERSION` in `src/version.ts` and both `version` fields in `server.json`;
+  the release workflow fails if `server.json` disagrees with `package.json`.
 
 - Trusted publishing requires the runner to use Node ≥ 22.14 and npm ≥ 11.5.1
   (handled in the workflow).

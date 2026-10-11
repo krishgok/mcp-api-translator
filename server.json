@@ -1,0 +1,22 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.krishgok/mcp-api-translator",
+  "title": "MCP API Translator",
+  "description": "Turn OpenAPI / Postman specs into runnable MCP servers, or serve any API as live MCP tools.",
+  "repository": {
+    "url": "https://github.com/krishgok/mcp-api-translator",
+    "source": "github"
+  },
+  "websiteUrl": "https://github.com/krishgok/mcp-api-translator#readme",
+  "version": "0.4.1",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "mcp-api-translator",
+      "version": "0.4.1",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

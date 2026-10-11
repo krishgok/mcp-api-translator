@@ -37,6 +37,12 @@ jobs:
             echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $pkg_version"
             exit 1
           fi
+          # server.json (MCP Registry metadata) must describe the same release.
+          srv_versions=$(jq -r '[.version, .packages[].version] | unique | join(",")' server.json)
+          if [ "$srv_versions" != "$pkg_version" ]; then
+            echo "::error::server.json versions ($srv_versions) do not match package.json version $pkg_version"
+            exit 1
+          fi
 
   npm-publish:
     needs: verify
@@ -68,6 +74,26 @@ jobs:
           else
             npm publish --access public
           fi
+
+  # Lists the release on the official MCP Registry (registry.modelcontextprotocol.io). The registry
+  # only stores metadata and validates it against the npm package's `mcpName`, so this runs after
+  # npm-publish. Stable tags only: pre-releases stay off the registry like they stay off npm `latest`.
+  mcp-registry-publish:
+    needs: npm-publish
+    if: ${{ !contains(github.ref_name, '-') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # OIDC login for the io.github.krishgok/* namespace (no registry secret)
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install mcp-publisher
+        # Latest release on purpose: older binaries fail OIDC login with "invalid audience".
+        run: |
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" \
+            | tar xz mcp-publisher
+      - run: ./mcp-publisher login github-oidc
+      - run: ./mcp-publisher publish
 
   docker-publish:
     needs: verify
