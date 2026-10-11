@@ -1,6 +1,7 @@
 {
   "name": "mcp-api-translator",
-  "version": "0.4.0",
+  "version": "0.4.1",
+  "mcpName": "io.github.krishgok/mcp-api-translator",
   "description": "An MCP server that turns OpenAPI / Postman API definitions into runnable MCP servers, making any API discoverable to AI models.",
   "license": "AGPL-3.0-or-later",
   "author": "krishgok",
