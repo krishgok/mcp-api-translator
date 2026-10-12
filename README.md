@@ -199,7 +199,7 @@ containers, readable text on a TTY (`LOG_LEVEL`, `LOG_FORMAT`).
 | [CONTRIBUTING.md](CONTRIBUTING.md)                  | Dev setup, PR conventions, DCO sign-off.                            |
 
 **Known limits at a glance:** OpenAPI 3.0/3.1 and Postman v2.1 (Swagger 2.0 best-effort), no
-GraphQL/gRPC; no interactive OAuth consent flows; no upstream streaming or auto-pagination; output
+GraphQL/gRPC; no interactive OAuth consent flows yet (planned, [R6](docs/serve-api-proposal.md#roadmap)); no upstream streaming or auto-pagination; output
 quality tracks spec quality. Details and the security model: [docs/design.md](docs/design.md).
 
 ## Development
