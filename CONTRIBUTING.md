@@ -113,6 +113,15 @@ workflow also pushes a multi-arch Docker image to GHCR, generates an SBOM, and
 creates a GitHub Release. Stable tags are also listed on the official
 [MCP Registry](https://registry.modelcontextprotocol.io) via GitHub OIDC (no secret).
 
+The GitHub Release also carries two [MCPB](https://github.com/modelcontextprotocol/mcpb)
+bundles built by `npm run build:mcpb` (also run in CI):
+
+- `mcp-api-translator-<version>.mcpb` — a standard bundle for one-click installs (e.g. Claude Desktop).
+- `mcp-api-translator-<version>-smithery.mcpb` — for Smithery, which rejects manifest tools
+  without an `inputSchema` (a key the MCPB schema doesn't allow, hence the separate file).
+  Smithery isn't automated; after a release, download it from the GitHub Release and run
+  `npx @smithery/cli mcp publish ./mcp-api-translator-<version>-smithery.mcpb -n eatingnest/mcp-api-translator`.
+
 Notes:
 
 - `npm version` only bumps `package.json`. Before tagging, also bump

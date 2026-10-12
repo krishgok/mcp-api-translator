@@ -134,8 +134,28 @@ jobs:
           provenance: true
           sbom: true
 
+  # MCPB bundles for one-click installs (Claude Desktop) and Smithery, attached to the GitHub
+  # Release. Built from the same npm pack output the npm job publishes; see scripts/build-mcpb.mjs.
+  mcpb-bundle:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run build:mcpb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mcpb-bundles
+          path: build/mcpb/*.mcpb
+          if-no-files-found: error
+
   github-release:
-    needs: [npm-publish, docker-publish]
+    needs: [npm-publish, docker-publish, mcpb-bundle]
     runs-on: ubuntu-latest
     permissions:
       contents: write # create release
@@ -148,6 +168,10 @@ jobs:
           format: spdx-json
           output-file: sbom.spdx.json
           upload-artifact: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: mcpb-bundles
+          path: mcpb
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -155,3 +179,4 @@ jobs:
           prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
             sbom.spdx.json
+            mcpb/*.mcpb
