@@ -167,6 +167,12 @@ and paste the resulting refresh token or bearer into env. That blocks the common
 user-delegated APIs (anything acting _as_ a person rather than a service account). R6 closes the
 gap for runtime `serve` first, then generated output (TS + Python), mirroring how R2/R5 landed.
 
+**Scope.** R6 covers the input formats the tool already reads. OpenAPI `authorizationCode` flows
+carry both `authorizationUrl` and `tokenUrl`, so they work as-is. Postman `oauth2` auth is parsed
+without its URLs (it falls back to a bearer `API_TOKEN` today), so Postman sources need the
+endpoints supplied through the `auth` argument, which gains an `authorizationUrl`. GraphQL and gRPC
+aren't supported as inputs at all, so they're out of scope until that changes.
+
 **Interactive flow.** For schemes that declare an `authorizationCode` flow:
 
 - A one-time `mcp-api-translator login --spec <spec>` (and a generated `login` script) runs the

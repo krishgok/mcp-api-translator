@@ -198,9 +198,16 @@ containers, readable text on a TTY (`LOG_LEVEL`, `LOG_FORMAT`).
 | [market-analysis.md](docs/market-analysis.md)       | Why both generate and serve models exist.                           |
 | [CONTRIBUTING.md](CONTRIBUTING.md)                  | Dev setup, PR conventions, DCO sign-off.                            |
 
-**Known limits at a glance:** OpenAPI 3.0/3.1 and Postman v2.1 (Swagger 2.0 best-effort), no
-GraphQL/gRPC; no interactive OAuth consent flows yet (planned, [R6](docs/serve-api-proposal.md#roadmap)); no upstream streaming or auto-pagination; output
-quality tracks spec quality. Details and the security model: [docs/design.md](docs/design.md).
+**Known limits at a glance:**
+
+- **Inputs:** OpenAPI 3.0/3.1 and Postman v2.1 (Swagger 2.0 best-effort). GraphQL and gRPC aren't
+  supported.
+- **Auth:** no interactive OAuth consent flow yet for the OpenAPI/Postman APIs it does support;
+  planned as [R6](docs/serve-api-proposal.md#roadmap).
+- **Responses:** no upstream streaming or auto-pagination.
+- **Output** quality tracks spec quality.
+
+Details and the security model: [docs/design.md](docs/design.md).
 
 ## Development
 
