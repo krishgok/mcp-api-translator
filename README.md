@@ -5,6 +5,7 @@
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
 [![Commercial license available](https://img.shields.io/badge/License-Commercial-green.svg)](LICENSING.md)
 [![MCP](https://img.shields.io/badge/MCP-server-blue.svg)](https://modelcontextprotocol.io)
+[![mcp-api-translator MCP server – quality and maintenance score on Glama](https://glama.ai/mcp/servers/krishgok/mcp-api-translator/badges/score.svg)](https://glama.ai/mcp/servers/krishgok/mcp-api-translator)
 
 **An MCP server that generates MCP servers.** Give it an API definition — OpenAPI 3.0/3.1 or a
 Postman collection — and it scaffolds a complete, runnable, _ownable_ TypeScript or Python MCP
