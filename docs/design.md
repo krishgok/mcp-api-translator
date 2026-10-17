@@ -43,7 +43,8 @@ tool-catalog.json       # optional (toolCatalog: true): name/summary/tags per to
 - **Auth:** API key / bearer / basic / pre-obtained OAuth token, plus the **OAuth2
   client-credentials grant** and the **refresh-token grant** (exchange a pre-obtained refresh
   token; tokens fetched + cached), all read from env. **No interactive (authorization-code)
-  consent flows** in v1. A spec that declares no security at all warns, and an `auth` argument
+  consent flows** yet; that and durable refresh-token storage are planned as R6 in
+  [serve-api-proposal.md](serve-api-proposal.md#roadmap). A spec that declares no security at all warns, and an `auth` argument
   supplies one — see [usage-workflow.md](usage-workflow.md#when-the-spec-declares-no-auth).
 - **Responses** are returned as JSON/text; no upstream streaming or automatic pagination.
 - **Postman** parameter types are inferred from examples (Postman carries no formal schema).
