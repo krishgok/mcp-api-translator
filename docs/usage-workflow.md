@@ -481,8 +481,11 @@ time if you're unsure what's supported.
 ## Notes & limits
 
 - **Inputs:** OpenAPI 3.0/3.1 and Postman v2.1 (Swagger 2.0 best-effort). No GraphQL/gRPC yet.
-- **Auth:** API key / bearer / basic / pre-obtained OAuth token, all from env. No interactive OAuth
-  flows or token refresh. A spec that declares no security warns, and `auth` supplies one.
+- **Auth:** API key / bearer / basic, plus OAuth2 client-credentials and refresh-token grants
+  (tokens fetched and cached), all from env. No interactive OAuth consent flow yet: refresh
+  tokens must be pre-obtained, and rotated ones live only in memory. Both are planned as
+  [R6](serve-api-proposal.md#r6-interactive-oauth-authorization-code--pkce-and-durable-token-refresh--planned).
+  A spec that declares no security warns, and `auth` supplies one.
 - **Responses:** returned as JSON/text; no upstream streaming or automatic pagination.
 - **Output quality tracks spec quality** — good `operationId`s and descriptions yield better tool
   names and docs. Curation helps; it can't invent semantics.

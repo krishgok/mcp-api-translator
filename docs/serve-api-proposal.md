@@ -1,7 +1,7 @@
 # Design: `serve` — runtime proxy (no codegen)
 
-Status: **implemented** — the core path (single + multi-spec stdio proxy) and all roadmap items
-below (R1–R5). Motivation comes from [market-analysis.md](market-analysis.md): the market is moving
+Status: **implemented** — the core path (single + multi-spec stdio proxy) and roadmap items
+R1–R5; R6 (interactive OAuth + durable token refresh) is planned. Motivation comes from [market-analysis.md](market-analysis.md): the market is moving
 toward runtime proxies for "expose an existing API to an agent," and static generation-time curation
 is being superseded by runtime tool discovery. This adds the runtime model alongside codegen.
 
@@ -76,10 +76,10 @@ returned the upstream body. No files generated.
 
 ---
 
-## Roadmap — market-analysis recommendations (all implemented)
+## Roadmap
 
-Each of these landed independently; the sections below record what shipped and the remaining
-explicit non-goals.
+R1–R5 (the market-analysis recommendations) have all landed; their sections record what shipped.
+R6 is planned. Each item is scoped to land independently.
 
 ### R1. Complement dynamic tool discovery (instead of competing with static filters) — **implemented**
 
@@ -158,10 +158,51 @@ token endpoints accept `grant_type=refresh_token`): supply a pre-obtained refres
 generated auth exchanges and caches access tokens; rotated refresh tokens are kept in memory. A
 pre-obtained bearer in `API_TOKEN` still works as a fallback, so setups that predate refresh
 support keep working. `clientCredentials` wins when a scheme declares several flows.
-**Still open:** authorization-code / interactive consent flows (a non-goal).
+**Still open:** authorization-code / interactive consent flows and durable token refresh — see R6.
+
+### R6. Interactive OAuth (authorization code + PKCE) and durable token refresh — **planned**
+
+Today every OAuth credential is pre-obtained: users must run a provider's consent flow elsewhere
+and paste the resulting refresh token or bearer into env. That blocks the common case of
+user-delegated APIs (anything acting _as_ a person rather than a service account). R6 closes the
+gap for runtime `serve` first, then generated output (TS + Python), mirroring how R2/R5 landed.
+
+**Scope.** R6 covers the input formats the tool already reads. OpenAPI `authorizationCode` flows
+carry both `authorizationUrl` and `tokenUrl`, so they work as-is. Postman `oauth2` auth is parsed
+without its URLs (it falls back to a bearer `API_TOKEN` today), so Postman sources need the
+endpoints supplied through the `auth` argument, which gains an `authorizationUrl`. GraphQL and gRPC
+aren't supported as inputs at all, so they're out of scope until that changes.
+
+**Interactive flow.** For schemes that declare an `authorizationCode` flow:
+
+- A one-time `mcp-api-translator login --spec <spec>` (and a generated `login` script) runs the
+  authorization-code grant with **PKCE** (RFC 7636) over a **loopback redirect** on
+  `127.0.0.1:<ephemeral port>` (RFC 8252): open the browser at `authorizationUrl`, receive the
+  code, exchange it at `tokenUrl`, and store the tokens. Scopes default to the scheme's declared
+  `scopes`, overridable per run.
+- Headless hosts (containers, SSH) need an alternative: the **device authorization grant**
+  (RFC 8628) where the provider supports it, otherwise print the URL and accept a pasted code.
+- Worth evaluating instead of, or alongside, a CLI step: MCP **URL-mode elicitation**, so the
+  client sends the user to the consent page from inside the session the first time a tool needs a
+  token. That only helps with clients that implement it, so the CLI path stays the baseline.
+
+**Durable token refresh.** The refresh-token grant from R5 keeps rotated refresh tokens in memory,
+so a restart falls back to the (possibly already-rotated, now invalid) env token; and a cached
+access token revoked before its expiry keeps failing until the TTL lapses. R6 adds:
+
+- A **token store** per env namespace (R2), so aggregated APIs stay isolated: the OS keychain
+  where available, else a file under the user config dir with `0600` permissions. Tokens never
+  go into the project, the manifest, or logs. Env vars keep precedence, so existing setups behave
+  exactly as today.
+- Persisting rotated refresh tokens to that store as soon as they arrive.
+- **401 handling:** on an upstream 401, drop the cached access token, refresh once, and retry the
+  request once; a second 401 is returned to the caller as before.
+
+**Open questions:** keychain access without a native dependency (the tool is dependency-light by
+design); how a generated Python project shares the store with `serve`; whether `login` belongs in
+the meta-server's tools or only the CLI (a tool that opens a browser is surprising mid-session).
 
 ## Non-goals (still)
 
-- Interactive end-user OAuth consent flows.
 - Competing with first-party vendor MCP servers for popular public APIs — the wedge is internal /
   long-tail / private APIs and multi-API aggregation.

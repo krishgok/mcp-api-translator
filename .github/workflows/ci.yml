@@ -24,6 +24,8 @@ jobs:
         run: npm run smoke:serve
       - name: Smoke-test the runtime proxy over Streamable HTTP
         run: npm run smoke:serve:http
+      - name: Build & smoke-test the MCPB bundles
+        run: npm run build:mcpb
 
   generated-output:
     # Proves the code we emit is itself valid: generate a project, then compile it.
